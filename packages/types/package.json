@@ -1,8 +1,8 @@
 {
-  "name": "@openpub/types",
+  "name": "@openpub-ai/types",
   "version": "0.1.0",
   "description": "OpenPub protocol types — the bridge between runtime and hub",
-  "author": "Doug Hardman <doug@mrdoug.com>",
+  "author": "Doug Hardman <dh@openpub.ai>",
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,5 +1,5 @@
 /**
- * @openpub/types Schema Tests
+ * @openpub-ai/types Schema Tests
  *
  * Validates all Zod schemas work correctly.
  * These are the protocol contracts — if these break, everything breaks.
@@ -17,7 +17,7 @@ import {
 } from '../index.js';
 
 describe('PubMdFrontmatter', () => {
-  it('validates a minimal pub.md', () => {
+  it('validates a minimal PUB.md', () => {
     const result = PubMdFrontmatter.safeParse({
       version: '1.0',
       name: 'Test Pub',
@@ -30,7 +30,7 @@ describe('PubMdFrontmatter', () => {
     expect(result.success).toBe(true);
   });
 
-  it('validates a full pub.md with all optional fields', () => {
+  it('validates a full PUB.md with all optional fields', () => {
     const result = PubMdFrontmatter.safeParse({
       version: '1.0',
       name: 'The Open Bar',

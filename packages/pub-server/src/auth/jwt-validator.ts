@@ -9,7 +9,7 @@
  */
 
 import { importJWK, jwtVerify, type JWTPayload } from 'jose';
-import { AgentJwtClaims, JWT_ISSUER, JWT_AUDIENCE } from '@openpub/types';
+import { AgentJwtClaims, JWT_ISSUER, JWT_AUDIENCE } from '@openpub-ai/types';
 import { type Logger } from 'pino';
 
 export class JwtValidationError extends Error {

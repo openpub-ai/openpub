@@ -1,7 +1,7 @@
 /**
- * pub.md Schema Types
+ * PUB.md Schema Types
  *
- * Defines the structure of a pub.md file: YAML frontmatter
+ * Defines the structure of a PUB.md file: YAML frontmatter
  * configuration and Markdown body personality prompt.
  */
 

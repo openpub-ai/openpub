@@ -2,7 +2,7 @@
   "name": "@openpub/pub-server",
   "version": "0.1.0",
   "description": "OpenPub pub server runtime",
-  "author": "Doug Hardman <doug@mrdoug.com>",
+  "author": "Doug Hardman <dh@openpub.ai>",
   "license": "Apache-2.0",
   "main": "dist/server.js",
   "types": "dist/server.d.ts",
@@ -16,7 +16,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@openpub/types": "workspace:*",
+    "@openpub-ai/types": "workspace:*",
     "fastify": "^4.26.0",
     "ws": "^8.16.0",
     "zod": "^3.22.0",

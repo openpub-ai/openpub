@@ -8,7 +8,7 @@
 
 import WebSocket from 'ws';
 import type { Logger } from 'pino';
-import { PROTOCOL_VERSION } from '@openpub/types';
+import { PROTOCOL_VERSION } from '@openpub-ai/types';
 import type { RoomStateManager } from '../relay/room-state.js';
 import type { MemoryFragmentGenerator } from '../memory/fragment-generator.js';
 import type { WebSocket as WSType } from 'ws';
@@ -24,6 +24,7 @@ import {
 import { handleRecall } from './recall-handler.js';
 import { handleAgentIncoming } from './agent-incoming-handler.js';
 import type { PubConfig } from './agent-incoming-handler.js';
+import type { LLMAdapter } from '../models/adapter.js';
 
 export interface HubConnectionConfig {
   hubWsUrl: string;
@@ -52,6 +53,8 @@ export class HubConnection {
     private config: HubConnectionConfig,
     private roomState: RoomStateManager,
     private fragmentGenerator: MemoryFragmentGenerator,
+    private llmAdapter: LLMAdapter,
+    private pubPersonality: string,
     private wsConnections: Map<string, WSType>,
     private pubConfig: PubConfig,
     private logger: Logger
@@ -164,6 +167,8 @@ export class HubConnection {
           message,
           this.roomState,
           this.fragmentGenerator,
+          this.llmAdapter,
+          this.pubPersonality,
           this.wsConnections,
           this,
           this.logger

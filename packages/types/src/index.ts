@@ -1,5 +1,5 @@
 /**
- * @openpub/types
+ * @openpub-ai/types
  *
  * Protocol type definitions for the OpenPub ecosystem.
  * This package is the ONLY bridge between the open source runtime

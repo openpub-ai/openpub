@@ -4,7 +4,7 @@
  * Uses the pub's environment model to moderate conversations.
  * Also supports manual moderator commands (warn, kick, ban).
  *
- * Enforces banned_agents list from pub.md on connection.
+ * Enforces banned_agents list from PUB.md on connection.
  */
 
 import type { LLMAdapter } from '../models/adapter';

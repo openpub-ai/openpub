@@ -5,7 +5,7 @@
  * provides a common interface across providers.
  */
 
-import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub/types';
+import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub-ai/types';
 
 export interface LLMAdapter {
   /**

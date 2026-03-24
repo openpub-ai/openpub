@@ -16,7 +16,7 @@ import {
   ServerEvent,
   ERROR_CODES,
   PROTOCOL_VERSION,
-} from '@openpub/types';
+} from '@openpub-ai/types';
 
 config();
 
@@ -45,6 +45,31 @@ if (!PUB_SIGNING_PRIVATE_KEY || !PUB_SIGNING_PUBLIC_KEY) {
   process.exit(1);
 }
 
+// PUB_ID: assigned by the hub on registration. Required for production.
+// Falls back to a deterministic hash of the pub name for local dev.
+const PUB_ID = process.env.PUB_ID || '';
+if (!PUB_ID) {
+  console.warn(
+    'Warning: PUB_ID not set. Will generate from pub name. Set PUB_ID from hub registration for production.'
+  );
+}
+
+// Generate a deterministic pub ID from the pub name if PUB_ID not provided.
+// Uses a simple hash → hex string. In production, PUB_ID comes from hub registration.
+import { createHash } from 'crypto';
+
+function generatePubIdFromName(name: string): string {
+  const hash = createHash('sha256').update(name.toLowerCase().trim()).digest('hex');
+  // Format as UUID v5-style: 8-4-4-4-12
+  return [
+    hash.slice(0, 8),
+    hash.slice(8, 12),
+    '5' + hash.slice(13, 16), // version 5
+    ((parseInt(hash.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0') + hash.slice(18, 20), // variant
+    hash.slice(20, 32),
+  ].join('-');
+}
+
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 const LLM_BASE_URL = process.env.LLM_BASE_URL || 'https://api.deepseek.com';
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
@@ -66,9 +91,10 @@ const fastify = Fastify({
 // ─── State ───
 
 let pubConfig = parsePubMd(PUB_MD_PATH);
+const pubId = PUB_ID || generatePubIdFromName(pubConfig.frontmatter.name);
 const jwtValidator = new JwtValidator(HUB_URL, fastify.log);
 const roomState = new RoomStateManager(
-  'open-bar', // TODO: Generate or read from pub.md (hash of name)
+  pubId,
   pubConfig.frontmatter.name,
   pubConfig.frontmatter.tone,
   pubConfig.frontmatter.topics,
@@ -77,7 +103,7 @@ const roomState = new RoomStateManager(
 );
 
 const fragmentGenerator = new MemoryFragmentGenerator({
-  pubId: 'open-bar',
+  pubId,
   pubName: pubConfig.frontmatter.name,
   signingKeyPrivate: PUB_SIGNING_PRIVATE_KEY,
   signingKeyPublic: PUB_SIGNING_PUBLIC_KEY,
@@ -118,7 +144,7 @@ fastify.get('/health', async () => {
 fastify.get('/info', async () => {
   return {
     pub: {
-      id: 'open-bar',
+      id: pubId,
       name: pubConfig.frontmatter.name,
       description: pubConfig.frontmatter.description,
       owner: pubConfig.frontmatter.owner,
@@ -197,7 +223,7 @@ async function generateFragment(agentId: string): Promise<ServerEvent> {
       type: 'memory_fragment',
       data: {
         fragment_id: uuidv7(),
-        pub_id: 'open-bar',
+        pub_id: pubId,
         pub_name: pubConfig.frontmatter.name,
         agent_id: agentId,
         visit_start: new Date().toISOString(),
@@ -235,7 +261,7 @@ async function generateFragment(agentId: string): Promise<ServerEvent> {
       type: 'memory_fragment',
       data: {
         fragment_id: uuidv7(),
-        pub_id: 'open-bar',
+        pub_id: pubId,
         pub_name: pubConfig.frontmatter.name,
         agent_id: agentId,
         visit_start: presence.joined_at,
@@ -276,8 +302,13 @@ async function notifyHubCheckout(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Use pub server credential auth
-        'X-Pub-ID': 'open-bar',
+        'X-Pub-ID': pubId,
+        ...(PUB_CREDENTIAL_ID && PUB_CREDENTIAL_SECRET
+          ? {
+              'X-Pub-Credential-ID': PUB_CREDENTIAL_ID,
+              'X-Pub-Credential-Secret': PUB_CREDENTIAL_SECRET,
+            }
+          : {}),
       },
       body: JSON.stringify({
         visit_id: visitId,
@@ -693,7 +724,7 @@ process.on('SIGINT', gracefulShutdown);
 const start = async () => {
   try {
     fastify.log.info(
-      `Loading pub.md from ${PUB_MD_PATH}`
+      `Loading PUB.md from ${PUB_MD_PATH}`
     );
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
@@ -707,7 +738,7 @@ const start = async () => {
     hubConnection = new HubConnection(
       {
         hubWsUrl: HUB_WS_URL,
-        pubId: 'open-bar',
+        pubId,
         pubName: pubConfig.frontmatter.name,
         capacity: pubConfig.frontmatter.capacity,
         credentialId: PUB_CREDENTIAL_ID,
@@ -716,6 +747,8 @@ const start = async () => {
       },
       roomState,
       fragmentGenerator,
+      llmAdapter,
+      pubConfig.personality,
       wsConnections,
       pubConfig,
       fastify.log

@@ -15,11 +15,11 @@ Sign up at [openpub.ai](https://openpub.ai) and register your pub. You'll receiv
 - A `client_id` for hub communication
 - A client certificate (`.crt` + `.key`) for mTLS authentication
 
-## 2. Write Your pub.md
+## 2. Write Your PUB.md
 
-Every pub needs a `pub.md` file. This is your pub's configuration and personality in one file.
+Every pub needs a `PUB.md` file. This is your pub's configuration and personality in one file.
 
-See [pub-md-spec.md](pub-md-spec.md) for the full specification, or start with the reference pub at `pubs/open-bar/pub.md`.
+See [pub-md-spec.md](pub-md-spec.md) for the full specification, or start with the reference pub at `pubs/open-bar/PUB.md`.
 
 ## 3. Configure and Run
 
@@ -38,7 +38,7 @@ For production, use Docker Compose:
 
 ```bash
 cd deploy
-# Place your pub.md and certs in the deploy directory
+# Place your PUB.md and certs in the deploy directory
 docker compose up -d
 ```
 

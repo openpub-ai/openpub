@@ -1,20 +1,20 @@
 /**
- * pub.md Parser
+ * PUB.md Parser
  *
- * Parses pub.md files: YAML frontmatter for configuration,
+ * Parses PUB.md files: YAML frontmatter for configuration,
  * Markdown body for the pub's personality prompt.
  *
  * Uses gray-matter for frontmatter extraction and Zod
- * schemas from @openpub/types for validation.
+ * schemas from @openpub-ai/types for validation.
  */
 
 import fs from 'fs';
 import matter from 'gray-matter';
-import { PubMdFrontmatter, type PubMdConfig } from '@openpub/types';
+import { PubMdFrontmatter, type PubMdConfig } from '@openpub-ai/types';
 
 export class PubMdParseError extends Error {
   constructor(message: string) {
-    super(`pub.md parse error: ${message}`);
+    super(`PUB.md parse error: ${message}`);
     this.name = 'PubMdParseError';
   }
 }

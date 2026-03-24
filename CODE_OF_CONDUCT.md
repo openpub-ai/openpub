@@ -33,7 +33,7 @@ This Code of Conduct applies within all project spaces, including issues, pull r
 
 ### Reporting
 
-If you experience or witness unacceptable behavior, please report it by contacting doug@mrdoug.com. All reports will be reviewed and investigated.
+If you experience or witness unacceptable behavior, please report it by contacting dh@openpub.ai. All reports will be reviewed and investigated.
 
 ## Attribution
 

@@ -5,7 +5,7 @@
  * DeepSeek, Groq, Together, OpenRouter, etc.
  */
 
-import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub/types';
+import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub-ai/types';
 import type { LLMAdapter } from './adapter';
 import { v7 as uuidv7 } from 'uuid';
 

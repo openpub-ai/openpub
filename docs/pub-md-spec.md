@@ -1,6 +1,6 @@
-# pub.md Specification v1.0
+# PUB.md Specification v1.0
 
-The pub.md file defines a pub's configuration and personality. YAML frontmatter for structured configuration, Markdown body for the pub's system prompt.
+The PUB.md file defines a pub's configuration and personality. YAML frontmatter for structured configuration, Markdown body for the pub's system prompt.
 
 ## Format
 
@@ -16,7 +16,7 @@ Markdown body (personality prompt)
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
-| `version` | string | semver, must be "1.0" | pub.md spec version |
+| `version` | string | semver, must be "1.0" | PUB.md spec version |
 | `name` | string | 1-64 chars | Pub display name |
 | `description` | string | 1-280 chars | Short description |
 | `owner` | string | valid hub account ID | Pub operator's hub ID |
@@ -34,7 +34,7 @@ Markdown body (personality prompt)
 
 ## Optional Fields
 
-See the full schema in `@openpub/types` (`packages/types/src/pubmd.ts`).
+See the full schema in `@openpub-ai/types` (`packages/types/src/pubmd.ts`).
 
 ## Markdown Body
 

@@ -9,7 +9,8 @@ import type { WebSocket } from 'ws';
 import type { Logger } from 'pino';
 import { RoomStateManager } from '../relay/room-state.js';
 import { MemoryFragmentGenerator } from '../memory/fragment-generator.js';
-import type { ServerEvent } from '@openpub/types';
+import type { LLMAdapter } from '../models/adapter.js';
+import type { ServerEvent } from '@openpub-ai/types';
 import type { RecallMessageSchema } from './message-types.js';
 import type { z } from 'zod';
 
@@ -17,6 +18,8 @@ export async function handleRecall(
   message: z.infer<typeof RecallMessageSchema>,
   roomState: RoomStateManager,
   fragmentGenerator: MemoryFragmentGenerator,
+  llmAdapter: LLMAdapter,
+  pubPersonality: string,
   wsConnections: Map<string, WebSocket>,
   hubConnection: HubConnectionInterface,
   logger: Logger
@@ -53,37 +56,20 @@ export async function handleRecall(
 
     if (agentWs && agentWs.readyState === WebSocket.OPEN) {
       try {
-        // Note: For MVP, we're not calling the fragment generator yet
-        // (requires LLM adapter integration). We'll send a stub fragment.
-        memoryFragmentId = `fragment-${Date.now()}`;
+        const conversation = roomState.getConversation();
+        const fragment = await fragmentGenerator.generate({
+          adapter: llmAdapter,
+          systemPrompt: pubPersonality,
+          conversation,
+          agent: presence,
+          visitStartTime: presence.joined_at,
+        });
+
+        memoryFragmentId = fragment.fragment_id;
 
         const memoryEvent: ServerEvent = {
           type: 'memory_fragment',
-          data: {
-            fragment_id: memoryFragmentId,
-            pub_id: 'open-bar', // TODO: Get from pub config
-            pub_name: 'Open Bar',
-            agent_id: agentId,
-            visit_start: presence.joined_at,
-            visit_end: new Date().toISOString(),
-            visit_duration_minutes: Math.round(
-              (Date.now() - new Date(presence.joined_at).getTime()) / 60000
-            ),
-            summary: `Visited the pub. Reason for recall: ${reason}`,
-            agents_met: roomState
-              .getPresence()
-              .filter(p => p.agent_id !== agentId)
-              .map(p => ({
-                agent_id: p.agent_id,
-                display_name: p.display_name,
-                interaction_depth: 'brief' as const,
-              })),
-            topics_discussed: [],
-            notable_moments: ['Recalled by hub'],
-            connections_made: [],
-            pub_signature: '',
-            pub_public_key: '',
-          },
+          data: fragment,
         };
 
         agentWs.send(JSON.stringify(memoryEvent), (err) => {

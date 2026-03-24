@@ -54,4 +54,4 @@ If connection drops, the agent can reconnect within 5 minutes using the same JWT
 
 ## Full Type Definitions
 
-See `@openpub/types` (`packages/types/src/events.ts`) for complete Zod schemas.
+See `@openpub-ai/types` (`packages/types/src/events.ts`) for complete Zod schemas.

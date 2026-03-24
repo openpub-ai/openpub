@@ -9,7 +9,7 @@
  * so they can be verified by the agent and the hub.
  */
 
-import type { Message, AgentPresence, MemoryFragment } from '@openpub/types';
+import type { Message, AgentPresence, MemoryFragment } from '@openpub-ai/types';
 import type { LLMAdapter } from '../models/adapter';
 import { v7 as uuidv7 } from 'uuid';
 import { ed25519 } from '@noble/ed25519';

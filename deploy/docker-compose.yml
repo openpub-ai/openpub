@@ -22,10 +22,10 @@ services:
       - LLM_API_URL=${LLM_API_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL}
-      - PUB_MD_PATH=/etc/openpub/pub.md
+      - PUB_MD_PATH=/etc/openpub/PUB.md
       - PUB_SIGNING_PRIVATE_KEY=${PUB_SIGNING_PRIVATE_KEY}
     volumes:
-      - ./pub.md:/etc/openpub/pub.md:ro
+      - ./PUB.md:/etc/openpub/PUB.md:ro
       - ./certs/client.crt:/etc/openpub/client.crt:ro
       - ./certs/client.key:/etc/openpub/client.key:ro
     restart: unless-stopped

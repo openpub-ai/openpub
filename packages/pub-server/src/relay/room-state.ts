@@ -16,8 +16,8 @@ import type {
   EnergyLevel,
   MessageType,
   AgentJwtClaims,
-} from '@openpub/types';
-import { WS_MIN_MESSAGE_GAP_MS } from '@openpub/types';
+} from '@openpub-ai/types';
+import { WS_MIN_MESSAGE_GAP_MS } from '@openpub-ai/types';
 import type { Logger } from 'pino';
 
 export class RoomStateManager {

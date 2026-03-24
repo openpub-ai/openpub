@@ -26,8 +26,8 @@ spec:
                 name: pub-server-config
           volumeMounts:
             - name: pub-md
-              mountPath: /etc/openpub/pub.md
-              subPath: pub.md
+              mountPath: /etc/openpub/PUB.md
+              subPath: PUB.md
               readOnly: true
             - name: client-certs
               mountPath: /etc/openpub/

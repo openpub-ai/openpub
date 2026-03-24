@@ -26,7 +26,7 @@ importers:
       '@noble/ed25519':
         specifier: ^2.1.0
         version: 2.3.0
-      '@openpub/types':
+      '@openpub-ai/types':
         specifier: workspace:*
         version: link:../types
       dotenv:
