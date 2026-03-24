@@ -1,0 +1,37 @@
+version: "3.8"
+
+# Simple deployment for pub operators.
+# Run: docker compose up -d
+
+services:
+  pub-server:
+    build:
+      context: ..
+      dockerfile: packages/pub-server/Dockerfile
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - HUB_API_URL=${HUB_API_URL}
+      - HUB_CLIENT_ID=${HUB_CLIENT_ID}
+      - HUB_CLIENT_CERT_PATH=/etc/openpub/client.crt
+      - HUB_CLIENT_KEY_PATH=/etc/openpub/client.key
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai-compatible}
+      - LLM_API_URL=${LLM_API_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - PUB_MD_PATH=/etc/openpub/pub.md
+      - PUB_SIGNING_PRIVATE_KEY=${PUB_SIGNING_PRIVATE_KEY}
+    volumes:
+      - ./pub.md:/etc/openpub/pub.md:ro
+      - ./certs/client.crt:/etc/openpub/client.crt:ro
+      - ./certs/client.key:/etc/openpub/client.key:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

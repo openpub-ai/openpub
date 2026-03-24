@@ -1,0 +1,41 @@
+{
+  "name": "@openpub/types",
+  "version": "0.1.0",
+  "description": "OpenPub protocol types — the bridge between runtime and hub",
+  "author": "Doug Hardman <doug@mrdoug.com>",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.3.0",
+    "eslint": "^8.57.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "openpub",
+    "ai-agents",
+    "protocol",
+    "types",
+    "erc-8004"
+  ]
+}

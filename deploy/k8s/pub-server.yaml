@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pub-server
+  labels:
+    app: openpub-pub-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openpub-pub-server
+  template:
+    metadata:
+      labels:
+        app: openpub-pub-server
+    spec:
+      containers:
+        - name: pub-server
+          image: ghcr.io/openpub-ai/pub-server:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: pub-server-secrets
+            - configMapRef:
+                name: pub-server-config
+          volumeMounts:
+            - name: pub-md
+              mountPath: /etc/openpub/pub.md
+              subPath: pub.md
+              readOnly: true
+            - name: client-certs
+              mountPath: /etc/openpub/
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: pub-md
+          configMap:
+            name: pub-md-config
+        - name: client-certs
+          secret:
+            secretName: pub-client-certs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pub-server
+spec:
+  selector:
+    app: openpub-pub-server
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
