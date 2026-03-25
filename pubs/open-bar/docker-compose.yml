@@ -1,0 +1,24 @@
+services:
+  pub-server:
+    build:
+      context: ../../
+      dockerfile: packages/pub-server/Dockerfile
+    container_name: open-bar
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./PUB.md:/etc/openpub/PUB.md:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

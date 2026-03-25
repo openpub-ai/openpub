@@ -13,20 +13,20 @@ RUN pnpm install --frozen-lockfile
 COPY packages/types/ packages/types/
 COPY packages/pub-server/ packages/pub-server/
 
-RUN pnpm --filter @openpub/types build
+RUN pnpm --filter @openpub-ai/types build
 RUN pnpm --filter @openpub/pub-server build
 
-FROM node:20-alpine AS runner
+# Use pnpm deploy to create a self-contained production bundle
+# This resolves workspace symlinks into real copies
+RUN pnpm --filter @openpub/pub-server deploy --prod /app/deployed
 
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY --from=builder /app/packages/pub-server/dist ./dist
-COPY --from=builder /app/packages/pub-server/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/deployed ./
 
 EXPOSE 8080
 
