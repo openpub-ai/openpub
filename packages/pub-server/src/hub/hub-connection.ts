@@ -36,6 +36,22 @@ export interface HubConnectionConfig {
   pubExternalWsUrl: string;
 }
 
+/** Callbacks for handling relayed agent messages from the hub */
+export interface RelayCallbacks {
+  onAgentConnected: (
+    agentId: string,
+    sessionId: string,
+    displayName: string,
+    claims: Record<string, unknown>
+  ) => void;
+  onAgentMessage: (
+    agentId: string,
+    sessionId: string,
+    event: { type: string; content?: string }
+  ) => void;
+  onAgentDisconnected: (agentId: string, sessionId: string) => void;
+}
+
 export class HubConnection {
   private ws: WSType | null = null;
   private reconnectAttempts = 0;
@@ -49,6 +65,8 @@ export class HubConnection {
   private isShuttingDown = false;
   private heartbeatIntervalMs = 30000; // Default, updated by server
 
+  private relayCallbacks: RelayCallbacks | null = null;
+
   constructor(
     private config: HubConnectionConfig,
     private roomState: RoomStateManager,
@@ -59,6 +77,11 @@ export class HubConnection {
     private pubConfig: PubConfig,
     private logger: Logger
   ) {}
+
+  /** Set relay callbacks for handling agents connected through the hub */
+  setRelayCallbacks(callbacks: RelayCallbacks): void {
+    this.relayCallbacks = callbacks;
+  }
 
   /**
    * Connect to the hub
@@ -194,9 +217,31 @@ export class HubConnection {
         this.logger.info(`Received admin command: ${message.command} (unimplemented)`);
         break;
 
+      case 'agent_connected':
+        if (this.relayCallbacks) {
+          this.relayCallbacks.onAgentConnected(
+            message.agentId,
+            message.sessionId,
+            message.displayName,
+            message.claims as Record<string, unknown>
+          );
+        }
+        break;
+
+      case 'agent_message':
+        if (this.relayCallbacks) {
+          this.relayCallbacks.onAgentMessage(message.agentId, message.sessionId, message.event);
+        }
+        break;
+
+      case 'agent_disconnected':
+        if (this.relayCallbacks) {
+          this.relayCallbacks.onAgentDisconnected(message.agentId, message.sessionId);
+        }
+        break;
+
       default: {
-        const _exhaustive: never = message;
-        this.logger.warn(`Unknown message type: ${_exhaustive}`);
+        this.logger.warn(`Unknown message type from hub`);
       }
     }
   }

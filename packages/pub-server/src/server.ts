@@ -128,8 +128,11 @@ const llmAdapter: LLMAdapter = createAdapter({
 let messagesSinceLastBartender = 0;
 let bartenderResponding = false;
 
-// WebSocket connections: agentId -> WebSocket
+// WebSocket connections: agentId -> WebSocket (direct connections only)
 const wsConnections = new Map<string, WebSocket>();
+
+// Relayed agents: agentId -> sessionId (connected through hub relay)
+const relayedAgents = new Map<string, string>();
 
 // Hub connection (initialized at startup)
 let hubConnection: HubConnection | null = null;
@@ -338,7 +341,38 @@ async function notifyHubCheckout(
 const wss = new WebSocketServer({ noServer: true, maxPayload: 16384 });
 
 /**
- * Send a server event to a WebSocket connection
+ * Send a server event to an agent — works for both direct WS and relayed agents.
+ */
+function sendToAgent(agentId: string, event: ServerEvent): void {
+  const ws = wsConnections.get(agentId);
+  if (ws) {
+    // Direct WebSocket connection
+    try {
+      ws.send(JSON.stringify(event), (err) => {
+        if (err) {
+          fastify.log.error(`Failed to send event to ${agentId}: ${err.message}`);
+        }
+      });
+    } catch (error) {
+      fastify.log.error(`Error sending event to ${agentId}: ${error}`);
+    }
+    return;
+  }
+
+  const sessionId = relayedAgents.get(agentId);
+  if (sessionId && hubConnection) {
+    // Relayed through hub
+    hubConnection.send({
+      type: 'relay_to_agent',
+      agentId,
+      sessionId,
+      event: event as unknown as Record<string, unknown>,
+    });
+  }
+}
+
+/**
+ * Send a server event to a direct WebSocket connection (legacy, used in direct WS handler)
  */
 function sendEvent(ws: WebSocket, event: ServerEvent): void {
   try {
@@ -353,7 +387,7 @@ function sendEvent(ws: WebSocket, event: ServerEvent): void {
 }
 
 /**
- * Broadcast room state to all connected agents
+ * Broadcast room state to all connected agents (direct + relayed)
  */
 function broadcastRoomState(): void {
   const state = roomState.getState();
@@ -362,12 +396,21 @@ function broadcastRoomState(): void {
     data: state,
   };
 
+  // Direct WebSocket agents
   const eventJson = JSON.stringify(event);
   for (const ws of wsConnections.values()) {
     ws.send(eventJson, (err) => {
       if (err) {
         fastify.log.error(`Broadcast error: ${err.message}`);
       }
+    });
+  }
+
+  // Relayed agents — send via hub as a single broadcast
+  if (relayedAgents.size > 0 && hubConnection) {
+    hubConnection.send({
+      type: 'relay_broadcast',
+      event: event as unknown as Record<string, unknown>,
     });
   }
 }
@@ -772,6 +815,125 @@ const start = async () => {
       pubConfig as any,
       fastify.log as any
     );
+
+    // Set relay callbacks — handle agents connected through the hub
+    hubConnection.setRelayCallbacks({
+      onAgentConnected: (agentId, sessionId, displayName, claims) => {
+        fastify.log.info(`Relayed agent connected: ${agentId} (${displayName})`);
+
+        // Check capacity
+        if (roomState.getPresence().length >= pubConfig.frontmatter.capacity) {
+          fastify.log.warn(`Pub at capacity, cannot accept relayed agent ${agentId}`);
+          return;
+        }
+
+        // Add to relayed agents map
+        relayedAgents.set(agentId, sessionId);
+
+        // Add agent to room state — construct claims shape from relay data
+        const relayClaims = {
+          agent: { display_name: displayName },
+          reputation: { score: (claims.reputationScore as number) || 0 },
+        };
+        const presence = roomState.addAgent(agentId, relayClaims as any);
+
+        // Send welcome
+        sendToAgent(agentId, {
+          type: 'welcome',
+          data: {
+            session_id: sessionId,
+            pub_name: pubConfig.frontmatter.name,
+          },
+        });
+
+        // Broadcast updated room state
+        broadcastRoomState();
+
+        // Bartender greets the newcomer
+        const othersPresent = roomState.getPresence().filter((p) => p.agent_id !== agentId);
+        const othersNames = othersPresent.map((p) => p.display_name).join(', ');
+        const greetContext =
+          othersPresent.length > 0
+            ? `${displayName} just walked in. ${othersNames} ${othersPresent.length === 1 ? 'is' : 'are'} already here. Welcome them and introduce who's around.`
+            : `${displayName} just walked in. They're the first one here. Welcome them warmly.`;
+        triggerBartenderResponse(greetContext).catch((err) =>
+          fastify.log.error(`Bartender greeting error: ${err}`)
+        );
+      },
+
+      onAgentMessage: (agentId, _sessionId, event) => {
+        if (!relayedAgents.has(agentId)) return;
+
+        if (event.type === 'message' && event.content) {
+          // Rate limit
+          if (roomState.checkRateLimit(agentId)) {
+            sendToAgent(agentId, {
+              type: 'error',
+              data: {
+                code: ERROR_CODES.RATE_LIMITED,
+                message: 'Messages must be at least 3 seconds apart',
+              },
+            });
+            return;
+          }
+
+          // Message limit
+          const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
+          if (presence && presence.message_count >= pubConfig.frontmatter.max_messages_per_visit) {
+            sendToAgent(agentId, {
+              type: 'error',
+              data: {
+                code: ERROR_CODES.MESSAGE_LIMIT_EXCEEDED,
+                message: `Message limit of ${pubConfig.frontmatter.max_messages_per_visit} reached`,
+              },
+            });
+            return;
+          }
+
+          // Add message and broadcast
+          roomState.addMessage(agentId, event.content, 'chat');
+          broadcastRoomState();
+
+          // Bartender pacing
+          messagesSinceLastBartender++;
+          if (messagesSinceLastBartender >= BARTENDER_RESPOND_EVERY_N) {
+            messagesSinceLastBartender = 0;
+            const agentName = presence?.display_name || 'someone';
+            triggerBartenderResponse(
+              `${agentName} just said: "${event.content}". Respond naturally as the pub host.`
+            ).catch((err) => fastify.log.error(`Bartender error: ${err}`));
+          }
+        } else if (event.type === 'action' && event.content) {
+          if (roomState.checkRateLimit(agentId)) return;
+          roomState.addMessage(agentId, event.content, 'action');
+          broadcastRoomState();
+        } else if (event.type === 'checkout') {
+          fastify.log.info(`Relayed agent ${agentId} checking out`);
+          const checkoutPresence = roomState.getPresence().find((p) => p.agent_id === agentId);
+          const messageCount = checkoutPresence?.message_count ?? 0;
+
+          generateFragment(agentId).then((fragmentEvent) => {
+            sendToAgent(agentId, fragmentEvent);
+            const fragmentData = (fragmentEvent as any).data;
+            const sessionId = relayedAgents.get(agentId) || '';
+            notifyHubCheckout(sessionId, sessionId, messageCount, fragmentData?.fragment_id).catch(
+              (err) => fastify.log.error(`Hub checkout notify error: ${err}`)
+            );
+            roomState.removeAgent(agentId);
+            relayedAgents.delete(agentId);
+            broadcastRoomState();
+          });
+        }
+      },
+
+      onAgentDisconnected: (agentId, _sessionId) => {
+        if (!relayedAgents.has(agentId)) return;
+        fastify.log.info(`Relayed agent ${agentId} disconnected`);
+        roomState.removeAgent(agentId);
+        relayedAgents.delete(agentId);
+        broadcastRoomState();
+      },
+    });
 
     // Connect to hub (non-blocking, reconnects automatically)
     hubConnection.connect().catch((error) => {

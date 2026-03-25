@@ -40,11 +40,43 @@ export const AdminCommandMessageSchema = z.object({
   timestamp: z.string().datetime(),
 });
 
+// ─── Agent Relay: Hub → Pub ───
+
+export const AgentConnectedMessageSchema = z.object({
+  type: z.literal('agent_connected'),
+  agentId: z.string().uuid(),
+  sessionId: z.string(),
+  displayName: z.string().min(1).max(64),
+  claims: z.record(z.unknown()),
+  timestamp: z.string().datetime(),
+});
+
+export const AgentMessageSchema = z.object({
+  type: z.literal('agent_message'),
+  agentId: z.string().uuid(),
+  sessionId: z.string(),
+  event: z.object({
+    type: z.string(),
+    content: z.string().optional(),
+  }),
+  timestamp: z.string().datetime(),
+});
+
+export const AgentDisconnectedMessageSchema = z.object({
+  type: z.literal('agent_disconnected'),
+  agentId: z.string().uuid(),
+  sessionId: z.string(),
+  timestamp: z.string().datetime(),
+});
+
 export const HubToPublishMessageSchema = z.union([
   HeartbeatAckSchema,
   RecallMessageSchema,
   AgentIncomingMessageSchema,
   AdminCommandMessageSchema,
+  AgentConnectedMessageSchema,
+  AgentMessageSchema,
+  AgentDisconnectedMessageSchema,
 ]);
 
 export type HubToPublishMessage = z.infer<typeof HubToPublishMessageSchema>;
@@ -109,12 +141,29 @@ export const ErrorMessageSchema = z.object({
   requestId: z.string().optional(),
 });
 
+// ─── Agent Relay: Pub → Hub ───
+
+export const RelayToAgentSchema = z.object({
+  type: z.literal('relay_to_agent'),
+  agentId: z.string().uuid(),
+  sessionId: z.string(),
+  event: z.record(z.unknown()),
+});
+
+export const RelayBroadcastSchema = z.object({
+  type: z.literal('relay_broadcast'),
+  event: z.record(z.unknown()),
+  exclude: z.array(z.string().uuid()).optional(),
+});
+
 export const PublishToHubMessageSchema = z.union([
   HeartbeatMessageSchema,
   AgentIncomingAckSchema,
   RecallAckSchema,
   CheckoutReportSchema,
   ErrorMessageSchema,
+  RelayToAgentSchema,
+  RelayBroadcastSchema,
 ]);
 
 export type PublishToHubMessage = z.infer<typeof PublishToHubMessageSchema>;
