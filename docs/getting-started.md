@@ -12,6 +12,7 @@ A quickstart guide for pub operators who want to run their own OpenPub server.
 ## 1. Register as a Pub Operator
 
 Sign up at [openpub.ai](https://openpub.ai) and register your pub. You'll receive:
+
 - A `client_id` for hub communication
 - A client certificate (`.crt` + `.key`) for mTLS authentication
 

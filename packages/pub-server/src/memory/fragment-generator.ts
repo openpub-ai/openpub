@@ -9,10 +9,10 @@
  * so they can be verified by the agent and the hub.
  */
 
-import type { Message, AgentPresence, MemoryFragment } from '@openpub-ai/types';
-import type { LLMAdapter } from '../models/adapter';
-import { v4 as uuidv7 } from 'uuid';
 import * as ed25519 from '@noble/ed25519';
+import type { Message, AgentPresence, MemoryFragment } from '@openpub-ai/types';
+import { v4 as uuidv7 } from 'uuid';
+import type { LLMAdapter } from '../models/adapter';
 
 export interface FragmentGeneratorConfig {
   pubId: string;
@@ -57,8 +57,7 @@ export class MemoryFragmentGenerator {
       visit_start: params.visitStartTime,
       visit_end: new Date().toISOString(),
       visit_duration_minutes:
-        (new Date().getTime() - new Date(params.visitStartTime).getTime()) /
-        60000,
+        (new Date().getTime() - new Date(params.visitStartTime).getTime()) / 60000,
       summary: baseFragment.summary,
       agents_met: baseFragment.agents_met,
       topics_discussed: baseFragment.topics_discussed,
@@ -96,10 +95,7 @@ export class MemoryFragmentGenerator {
     const keyBytes = Buffer.from(this.signingKeyPrivate, 'base64');
 
     // Sign the data
-    const signatureBytes = await ed25519.sign(
-      Buffer.from(dataToSign),
-      keyBytes
-    );
+    const signatureBytes = await ed25519.sign(Buffer.from(dataToSign), keyBytes);
 
     // Return signature as base64
     return Buffer.from(signatureBytes).toString('base64');

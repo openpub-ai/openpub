@@ -6,14 +6,17 @@
  * and message routing to handlers.
  */
 
-import WebSocket from 'ws';
-import type { Logger } from 'pino';
 import { PROTOCOL_VERSION } from '@openpub-ai/types';
-import type { RoomStateManager } from '../relay/room-state.js';
-import type { MemoryFragmentGenerator } from '../memory/fragment-generator.js';
+import type { Logger } from 'pino';
+import WebSocket from 'ws';
 import type { WebSocket as WSType } from 'ws';
 import type { WebSocket as FastifyWebSocket } from 'ws';
+import type { MemoryFragmentGenerator } from '../memory/fragment-generator.js';
+import type { LLMAdapter } from '../models/adapter.js';
+import type { RoomStateManager } from '../relay/room-state.js';
 
+import { handleAgentIncoming } from './agent-incoming-handler.js';
+import type { PubConfig } from './agent-incoming-handler.js';
 import {
   validateHubToPublishMessage,
   validateConnectionReady,
@@ -22,9 +25,6 @@ import {
   type HubToPublishMessage,
 } from './message-types.js';
 import { handleRecall } from './recall-handler.js';
-import { handleAgentIncoming } from './agent-incoming-handler.js';
-import type { PubConfig } from './agent-incoming-handler.js';
-import type { LLMAdapter } from '../models/adapter.js';
 
 export interface HubConnectionConfig {
   hubWsUrl: string;
@@ -133,9 +133,7 @@ export class HubConnection {
       if (!hubMessage) {
         const readyMessage = validateConnectionReady(parsed);
         if (readyMessage) {
-          this.logger.info(
-            `Hub ready (heartbeat interval: ${readyMessage.heartbeatIntervalMs}ms)`
-          );
+          this.logger.info(`Hub ready (heartbeat interval: ${readyMessage.heartbeatIntervalMs}ms)`);
           this.heartbeatIntervalMs = readyMessage.heartbeatIntervalMs;
           // Restart heartbeat with new interval
           this.stopHeartbeat();
@@ -193,9 +191,7 @@ export class HubConnection {
         break;
 
       case 'admin_command':
-        this.logger.info(
-          `Received admin command: ${message.command} (unimplemented)`
-        );
+        this.logger.info(`Received admin command: ${message.command} (unimplemented)`);
         break;
 
       default: {
@@ -321,9 +317,7 @@ export class HubConnection {
       }
     }, this.heartbeatIntervalMs);
 
-    this.logger.debug(
-      `Heartbeat started (interval: ${this.heartbeatIntervalMs}ms)`
-    );
+    this.logger.debug(`Heartbeat started (interval: ${this.heartbeatIntervalMs}ms)`);
   }
 
   /**

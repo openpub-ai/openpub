@@ -1,23 +1,19 @@
-import Fastify from 'fastify';
-import { WebSocketServer } from 'ws';
+import { createHash } from 'crypto';
+import { ClientEvent, ServerEvent, ERROR_CODES, PROTOCOL_VERSION } from '@openpub-ai/types';
 import { config } from 'dotenv';
-import { v4 as uuidv7 } from 'uuid';
+import Fastify from 'fastify';
 import type { RawServerDefault } from 'fastify';
+import { v4 as uuidv7 } from 'uuid';
+import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 
-import { parsePubMd, PubMdParseError } from './pubmd/parser.js';
 import { JwtValidator, JwtValidationError } from './auth/jwt-validator.js';
-import { RoomStateManager } from './relay/room-state.js';
-import { MemoryFragmentGenerator } from './memory/fragment-generator.js';
 import { HubConnection } from './hub/hub-connection.js';
+import { MemoryFragmentGenerator } from './memory/fragment-generator.js';
 import { createAdapter, type LLMAdapter } from './models/index.js';
 import { AutoModerator } from './moderation/auto-mod.js';
-import {
-  ClientEvent,
-  ServerEvent,
-  ERROR_CODES,
-  PROTOCOL_VERSION,
-} from '@openpub-ai/types';
+import { parsePubMd, PubMdParseError } from './pubmd/parser.js';
+import { RoomStateManager } from './relay/room-state.js';
 
 config();
 
@@ -57,7 +53,6 @@ if (!PUB_ID) {
 
 // Generate a deterministic pub ID from the pub name if PUB_ID not provided.
 // Uses a simple hash → hex string. In production, PUB_ID comes from hub registration.
-import { createHash } from 'crypto';
 
 function generatePubIdFromName(name: string): string {
   const hash = createHash('sha256').update(name.toLowerCase().trim()).digest('hex');
@@ -66,7 +61,8 @@ function generatePubIdFromName(name: string): string {
     hash.slice(0, 8),
     hash.slice(8, 12),
     '5' + hash.slice(13, 16), // version 5
-    ((parseInt(hash.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0') + hash.slice(18, 20), // variant
+    ((parseInt(hash.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0') +
+      hash.slice(18, 20), // variant
     hash.slice(20, 32),
   ].join('-');
 }
@@ -91,7 +87,7 @@ const fastify = Fastify({
 
 // ─── State ───
 
-let pubConfig = parsePubMd(PUB_MD_PATH);
+const pubConfig = parsePubMd(PUB_MD_PATH);
 const pubId = PUB_ID || generatePubIdFromName(pubConfig.frontmatter.name);
 const jwtValidator = new JwtValidator(HUB_URL, fastify.log as any);
 const roomState = new RoomStateManager(
@@ -183,8 +179,8 @@ async function triggerBartenderResponse(context: string): Promise<void> {
 
   try {
     // Random delay: feels like the bartender is thinking
-    const delay = BARTENDER_MIN_DELAY_MS +
-      Math.random() * (BARTENDER_MAX_DELAY_MS - BARTENDER_MIN_DELAY_MS);
+    const delay =
+      BARTENDER_MIN_DELAY_MS + Math.random() * (BARTENDER_MAX_DELAY_MS - BARTENDER_MIN_DELAY_MS);
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     const state = roomState.getState();
@@ -205,9 +201,7 @@ async function triggerBartenderResponse(context: string): Promise<void> {
       roomState.addMessage('house', response.trim(), 'chat');
       broadcastRoomState();
 
-      fastify.log.info(
-        `Bartender: ${response.trim().substring(0, 80)}...`
-      );
+      fastify.log.info(`Bartender: ${response.trim().substring(0, 80)}...`);
     }
   } catch (error) {
     fastify.log.error(`Bartender response error: ${error}`);
@@ -221,7 +215,7 @@ async function triggerBartenderResponse(context: string): Promise<void> {
  * Uses the LLM adapter + Ed25519 signing.
  */
 async function generateFragment(agentId: string): Promise<ServerEvent> {
-  const presence = roomState.getPresence().find(p => p.agent_id === agentId);
+  const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
   const conversation = roomState.getConversation();
 
   if (!presence) {
@@ -277,9 +271,10 @@ async function generateFragment(agentId: string): Promise<ServerEvent> {
           (Date.now() - new Date(presence.joined_at).getTime()) / 60000
         ),
         summary: `Visited ${pubConfig.frontmatter.name}`,
-        agents_met: roomState.getPresence()
-          .filter(p => p.agent_id !== agentId)
-          .map(p => ({
+        agents_met: roomState
+          .getPresence()
+          .filter((p) => p.agent_id !== agentId)
+          .map((p) => ({
             agent_id: p.agent_id,
             display_name: p.display_name,
             interaction_depth: 'brief' as const,
@@ -380,11 +375,7 @@ function broadcastRoomState(): void {
 /**
  * Close connection with error code and message
  */
-function closeWithError(
-  ws: WebSocket,
-  code: number,
-  reason: string
-): void {
+function closeWithError(ws: WebSocket, code: number, reason: string): void {
   const event: ServerEvent = {
     type: 'error',
     data: {
@@ -411,18 +402,14 @@ wss.on('connection', async (ws: WebSocket, req) => {
     const agentIdHeader = req.headers['x-openpub-agent-id'] as string | undefined;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      fastify.log.warn(
-        `WebSocket connection from ${remoteIp} missing Authorization header`
-      );
+      fastify.log.warn(`WebSocket connection from ${remoteIp} missing Authorization header`);
       return closeWithError(ws, 1008, ERROR_CODES.AUTH_INVALID_TOKEN);
     }
 
     const token = authHeader.slice(7); // Remove "Bearer "
 
     if (!agentIdHeader) {
-      fastify.log.warn(
-        `WebSocket connection from ${remoteIp} missing X-OpenPub-Agent-ID header`
-      );
+      fastify.log.warn(`WebSocket connection from ${remoteIp} missing X-OpenPub-Agent-ID header`);
       return closeWithError(ws, 1008, ERROR_CODES.AUTH_INVALID_TOKEN);
     }
 
@@ -444,9 +431,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
     // Verify agent ID matches
     if (claims.sub !== agentId) {
-      fastify.log.warn(
-        `Agent ID mismatch: header=${agentId}, token=${claims.sub}`
-      );
+      fastify.log.warn(`Agent ID mismatch: header=${agentId}, token=${claims.sub}`);
       return closeWithError(ws, 1008, ERROR_CODES.AUTH_INVALID_TOKEN);
     }
 
@@ -462,10 +447,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
     sessionId = uuidv7();
 
     // Check pub capacity
-    if (
-      roomState.getPresence().length >=
-      pubConfig.frontmatter.capacity
-    ) {
+    if (roomState.getPresence().length >= pubConfig.frontmatter.capacity) {
       fastify.log.warn(`Pub at capacity, rejecting ${agentId}`);
       return closeWithError(ws, 1009, ERROR_CODES.PUB_FULL);
     }
@@ -495,19 +477,18 @@ wss.on('connection', async (ws: WebSocket, req) => {
     // Broadcast updated room state
     broadcastRoomState();
 
-    fastify.log.info(
-      `Agent ${agentId} connected (session: ${sessionId}, remote: ${remoteIp})`
-    );
+    fastify.log.info(`Agent ${agentId} connected (session: ${sessionId}, remote: ${remoteIp})`);
 
     // Bartender greets the newcomer
     const displayName = presence.display_name;
-    const othersPresent = roomState.getPresence().filter(p => p.agent_id !== agentId);
-    const othersNames = othersPresent.map(p => p.display_name).join(', ');
-    const greetContext = othersPresent.length > 0
-      ? `${displayName} just walked in. ${othersNames} ${othersPresent.length === 1 ? 'is' : 'are'} already here. Welcome them and introduce who's around.`
-      : `${displayName} just walked in. They're the first one here. Welcome them warmly.`;
-    triggerBartenderResponse(greetContext).catch(
-      err => fastify.log.error(`Bartender greeting error: ${err}`)
+    const othersPresent = roomState.getPresence().filter((p) => p.agent_id !== agentId);
+    const othersNames = othersPresent.map((p) => p.display_name).join(', ');
+    const greetContext =
+      othersPresent.length > 0
+        ? `${displayName} just walked in. ${othersNames} ${othersPresent.length === 1 ? 'is' : 'are'} already here. Welcome them and introduce who's around.`
+        : `${displayName} just walked in. They're the first one here. Welcome them warmly.`;
+    triggerBartenderResponse(greetContext).catch((err) =>
+      fastify.log.error(`Bartender greeting error: ${err}`)
     );
 
     // ─── Message Handler ───
@@ -525,9 +506,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
           case 'message': {
             // Check rate limit
             if (roomState.checkRateLimit(agentId)) {
-              fastify.log.debug(
-                `Rate limit hit for ${agentId} (message too frequent)`
-              );
+              fastify.log.debug(`Rate limit hit for ${agentId} (message too frequent)`);
               const errorEvent: ServerEvent = {
                 type: 'error',
                 data: {
@@ -540,8 +519,11 @@ wss.on('connection', async (ws: WebSocket, req) => {
             }
 
             // Check message limit
-            const presence = roomState.getPresence().find(p => p.agent_id === agentId);
-            if (presence && presence.message_count >= pubConfig.frontmatter.max_messages_per_visit) {
+            const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
+            if (
+              presence &&
+              presence.message_count >= pubConfig.frontmatter.max_messages_per_visit
+            ) {
               fastify.log.info(`Message limit reached for ${agentId}`);
               const errorEvent: ServerEvent = {
                 type: 'error',
@@ -574,7 +556,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
                 },
               };
               sendEvent(ws, errorEvent);
-              
+
               if (modResult.action === 'kick') {
                 ws.close(1008, 'Kicked for violating rules');
               }
@@ -585,18 +567,18 @@ wss.on('connection', async (ws: WebSocket, req) => {
             roomState.addMessage(agentId, event.content, 'chat');
             broadcastRoomState();
 
-            fastify.log.debug(
-              `Message from ${agentId}: ${event.content.substring(0, 50)}...`
-            );
+            fastify.log.debug(`Message from ${agentId}: ${event.content.substring(0, 50)}...`);
 
             // Bartender response pacing: respond every N agent messages
             messagesSinceLastBartender++;
             if (messagesSinceLastBartender >= BARTENDER_RESPOND_EVERY_N) {
               messagesSinceLastBartender = 0;
-              const agentName = roomState.getPresence().find(p => p.agent_id === agentId)?.display_name || 'someone';
+              const agentName =
+                roomState.getPresence().find((p) => p.agent_id === agentId)?.display_name ||
+                'someone';
               triggerBartenderResponse(
                 `${agentName} just said: "${event.content}". Respond naturally as the pub host.`
-              ).catch(err => fastify.log.error(`Bartender error: ${err}`));
+              ).catch((err) => fastify.log.error(`Bartender error: ${err}`));
             }
             break;
           }
@@ -625,7 +607,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
             fastify.log.info(`Agent ${agentId} checking out`);
 
             // Get message count before agent is removed from room
-            const checkoutPresence = roomState.getPresence().find(p => p.agent_id === agentId);
+            const checkoutPresence = roomState.getPresence().find((p) => p.agent_id === agentId);
             const messageCount = checkoutPresence?.message_count ?? 0;
 
             // Generate real memory fragment (LLM-powered + signed)
@@ -638,7 +620,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
               sessionId || '',
               messageCount,
               fragmentData?.fragment_id
-            ).catch(err => fastify.log.error(`Hub checkout notify error: ${err}`));
+            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
 
             // Send fragment to agent before closing connection
             await new Promise<void>((resolve) => {
@@ -691,9 +673,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
         wsConnections.delete(agentId);
         broadcastRoomState();
 
-        fastify.log.info(
-          `Agent ${agentId} disconnected (session: ${sessionId})`
-        );
+        fastify.log.info(`Agent ${agentId} disconnected (session: ${sessionId})`);
       }
     });
 
@@ -701,17 +681,13 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
     ws.on('error', (error: Error) => {
       if (agentId) {
-        fastify.log.error(
-          `WebSocket error for ${agentId}: ${error.message}`
-        );
+        fastify.log.error(`WebSocket error for ${agentId}: ${error.message}`);
       } else {
         fastify.log.error(`WebSocket error: ${error.message}`);
       }
     });
   } catch (error) {
-    fastify.log.error(
-      `Unexpected error in WebSocket connection: ${error}`
-    );
+    fastify.log.error(`Unexpected error in WebSocket connection: ${error}`);
     closeWithError(ws, 1011, ERROR_CODES.INTERNAL_ERROR);
   }
 });
@@ -770,14 +746,10 @@ process.on('SIGINT', gracefulShutdown);
 
 const start = async () => {
   try {
-    fastify.log.info(
-      `Loading PUB.md from ${PUB_MD_PATH}`
-    );
+    fastify.log.info(`Loading PUB.md from ${PUB_MD_PATH}`);
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    fastify.log.info(
-      `OpenPub pub server "${pubConfig.frontmatter.name}" running on port ${PORT}`
-    );
+    fastify.log.info(`OpenPub pub server "${pubConfig.frontmatter.name}" running on port ${PORT}`);
     fastify.log.info(`Hub URL: ${HUB_URL}`);
     fastify.log.info(`Hub WS URL: ${HUB_WS_URL}`);
 

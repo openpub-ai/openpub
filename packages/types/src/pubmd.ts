@@ -16,13 +16,7 @@ export const PubEntryType = z.enum([
 ]);
 export type PubEntryType = z.infer<typeof PubEntryType>;
 
-export const PubTone = z.enum([
-  'casual',
-  'professional',
-  'academic',
-  'chaotic',
-  'quiet',
-]);
+export const PubTone = z.enum(['casual', 'professional', 'academic', 'chaotic', 'quiet']);
 export type PubTone = z.infer<typeof PubTone>;
 
 export const PubVisibility = z.enum(['transparent', 'dim', 'dark']);

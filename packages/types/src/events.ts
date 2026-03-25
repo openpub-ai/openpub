@@ -5,8 +5,8 @@
  */
 
 import { z } from 'zod';
-import type { RoomState } from './room-state.js';
 import type { MemoryFragment } from './memory-fragment.js';
+import type { RoomState } from './room-state.js';
 
 // ─── Client → Server ───
 

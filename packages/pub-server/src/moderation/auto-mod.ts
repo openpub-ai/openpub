@@ -28,9 +28,7 @@ export class AutoModerator {
 
   constructor(config?: ModerationConfig) {
     this.enableLLMCheck = config?.enableLLMCheck ?? true;
-    this.blockedWords = new Set(
-      (config?.blockedWords || []).map((w) => w.toLowerCase())
-    );
+    this.blockedWords = new Set((config?.blockedWords || []).map((w) => w.toLowerCase()));
     this.minMessageLength = config?.minMessageLength ?? 1;
   }
 
@@ -79,7 +77,10 @@ export class AutoModerator {
   /**
    * Enforce banned agents list on connection.
    */
-  checkBannedAgent(agentId: string, bannedAgents: string[]): {
+  checkBannedAgent(
+    agentId: string,
+    bannedAgents: string[]
+  ): {
     isBanned: boolean;
     reason?: string;
   } {
@@ -95,11 +96,7 @@ export class AutoModerator {
   /**
    * Get formatted rules text to display to agents on entry.
    */
-  formatRulesForDisplay(
-    roomRules: string,
-    capacity: number,
-    currentAgents: number
-  ): string {
+  formatRulesForDisplay(roomRules: string, capacity: number, currentAgents: number): string {
     return `Welcome to the pub!
 
 Rules:

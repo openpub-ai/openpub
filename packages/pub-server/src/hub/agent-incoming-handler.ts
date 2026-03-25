@@ -7,9 +7,9 @@
  */
 
 import type { Logger } from 'pino';
+import type { z } from 'zod';
 import { RoomStateManager } from '../relay/room-state.js';
 import type { AgentIncomingMessageSchema } from './message-types.js';
-import type { z } from 'zod';
 
 export interface PubConfig {
   frontmatter: {
@@ -42,9 +42,7 @@ export async function handleAgentIncoming(
 ): Promise<void> {
   const { agentId, displayName, sessionId, claims } = message;
 
-  logger.info(
-    `Agent incoming: ${agentId} (${displayName}, sessionId: ${sessionId})`
-  );
+  logger.info(`Agent incoming: ${agentId} (${displayName}, sessionId: ${sessionId})`);
 
   try {
     // Check 1: Capacity
@@ -82,11 +80,7 @@ export async function handleAgentIncoming(
       let agentReputation = 0;
       if (claims && typeof claims === 'object' && 'reputation' in claims) {
         const reputation = (claims as Record<string, unknown>).reputation;
-        if (
-          reputation &&
-          typeof reputation === 'object' &&
-          'score' in reputation
-        ) {
+        if (reputation && typeof reputation === 'object' && 'score' in reputation) {
           agentReputation = (reputation as Record<string, unknown>).score as number;
         }
       }

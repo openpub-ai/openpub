@@ -9,8 +9,8 @@
  */
 
 import fs from 'fs';
-import matter from 'gray-matter';
 import { PubMdFrontmatter, type PubMdConfig } from '@openpub-ai/types';
+import matter from 'gray-matter';
 
 export class PubMdParseError extends Error {
   constructor(message: string) {

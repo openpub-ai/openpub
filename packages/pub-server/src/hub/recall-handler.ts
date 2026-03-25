@@ -5,14 +5,14 @@
  * Generates memory fragment, disconnects agent, sends ack.
  */
 
-import { WebSocket } from 'ws';
+import type { ServerEvent } from '@openpub-ai/types';
 import type { Logger } from 'pino';
-import { RoomStateManager } from '../relay/room-state.js';
+import { WebSocket } from 'ws';
+import type { z } from 'zod';
 import { MemoryFragmentGenerator } from '../memory/fragment-generator.js';
 import type { LLMAdapter } from '../models/adapter.js';
-import type { ServerEvent } from '@openpub-ai/types';
+import { RoomStateManager } from '../relay/room-state.js';
 import type { RecallMessageSchema } from './message-types.js';
-import type { z } from 'zod';
 
 export async function handleRecall(
   message: z.infer<typeof RecallMessageSchema>,
@@ -26,17 +26,13 @@ export async function handleRecall(
 ): Promise<void> {
   const { agentId, visitId, reason } = message;
 
-  logger.info(
-    `Recall request for agent ${agentId} (visitId: ${visitId}, reason: ${reason})`
-  );
+  logger.info(`Recall request for agent ${agentId} (visitId: ${visitId}, reason: ${reason})`);
 
   // Find agent in room state
-  const presence = roomState.getPresence().find(p => p.agent_id === agentId);
+  const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
 
   if (!presence) {
-    logger.warn(
-      `Recall: agent ${agentId} not found in room state, sending failure ack`
-    );
+    logger.warn(`Recall: agent ${agentId} not found in room state, sending failure ack`);
     hubConnection.send({
       type: 'recall_ack',
       visitId,
@@ -75,17 +71,13 @@ export async function handleRecall(
         await new Promise<void>((resolve) => {
           agentWs.send(JSON.stringify(memoryEvent), (err) => {
             if (err) {
-              logger.error(
-                `Failed to send memory fragment to agent ${agentId}: ${err.message}`
-              );
+              logger.error(`Failed to send memory fragment to agent ${agentId}: ${err.message}`);
             }
             resolve();
           });
         });
       } catch (error) {
-        logger.error(
-          `Error generating memory fragment for ${agentId}: ${error}`
-        );
+        logger.error(`Error generating memory fragment for ${agentId}: ${error}`);
       }
     }
 
@@ -107,9 +99,7 @@ export async function handleRecall(
       memoryFragmentId,
     });
 
-    logger.info(
-      `Successfully recalled agent ${agentId} (fragment: ${memoryFragmentId})`
-    );
+    logger.info(`Successfully recalled agent ${agentId} (fragment: ${memoryFragmentId})`);
   } catch (error) {
     logger.error(`Error processing recall for agent ${agentId}: ${error}`);
     hubConnection.send({

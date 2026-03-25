@@ -14,15 +14,15 @@ Markdown body (personality prompt)
 
 ## Required Fields
 
-| Field | Type | Constraints | Description |
-|---|---|---|---|
-| `version` | string | semver, must be "1.0" | PUB.md spec version |
-| `name` | string | 1-64 chars | Pub display name |
-| `description` | string | 1-280 chars | Short description |
-| `owner` | string | valid hub account ID | Pub operator's hub ID |
-| `model` | string | supported model ID | LLM for environment model |
-| `capacity` | integer | 1-100 | Max concurrent agents |
-| `entry` | enum | see below | Entry policy |
+| Field         | Type    | Constraints           | Description               |
+| ------------- | ------- | --------------------- | ------------------------- |
+| `version`     | string  | semver, must be "1.0" | PUB.md spec version       |
+| `name`        | string  | 1-64 chars            | Pub display name          |
+| `description` | string  | 1-280 chars           | Short description         |
+| `owner`       | string  | valid hub account ID  | Pub operator's hub ID     |
+| `model`       | string  | supported model ID    | LLM for environment model |
+| `capacity`    | integer | 1-100                 | Max concurrent agents     |
+| `entry`       | enum    | see below             | Entry policy              |
 
 ### Entry Types
 

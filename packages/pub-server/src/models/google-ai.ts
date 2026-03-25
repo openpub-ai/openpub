@@ -5,8 +5,8 @@
  */
 
 import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub-ai/types';
-import type { LLMAdapter } from './adapter';
 import { v4 as uuidv7 } from 'uuid';
+import type { LLMAdapter } from './adapter';
 
 interface GoogleContent {
   role: string;
@@ -119,8 +119,7 @@ Return only valid JSON.`;
       visit_start: params.agent.joined_at,
       visit_end: new Date().toISOString(),
       visit_duration_minutes:
-        (new Date().getTime() - new Date(params.agent.joined_at).getTime()) /
-        60000,
+        (new Date().getTime() - new Date(params.agent.joined_at).getTime()) / 60000,
       summary: fragmentData.summary || 'An agent visited the pub.',
       agents_met: fragmentData.agents_met || [],
       topics_discussed: fragmentData.topics_discussed || [],
@@ -198,9 +197,7 @@ Return only valid JSON.`;
             continue;
           }
 
-          throw new Error(
-            `Google AI API error: ${response.status} ${response.statusText}`
-          );
+          throw new Error(`Google AI API error: ${response.status} ${response.statusText}`);
         }
 
         const data = (await response.json()) as GoogleGenerateResponse;

@@ -6,9 +6,9 @@
  */
 
 import type { LLMAdapter } from './adapter';
-import { OpenAICompatibleAdapter } from './openai-compatible';
-import { OllamaAdapter } from './ollama';
 import { GoogleAIAdapter } from './google-ai';
+import { OllamaAdapter } from './ollama';
+import { OpenAICompatibleAdapter } from './openai-compatible';
 
 export interface AdapterConfig {
   provider?: 'openai' | 'ollama' | 'google';
@@ -18,22 +18,19 @@ export interface AdapterConfig {
 }
 
 export function createAdapter(config: AdapterConfig): LLMAdapter {
-  const provider =
-    config.provider || process.env.LLM_PROVIDER || 'openai';
+  const provider = config.provider || process.env.LLM_PROVIDER || 'openai';
 
   switch (provider) {
     case 'openai':
       return new OpenAICompatibleAdapter({
-        baseUrl:
-          config.baseUrl || process.env.LLM_BASE_URL || 'https://api.openai.com',
+        baseUrl: config.baseUrl || process.env.LLM_BASE_URL || 'https://api.openai.com',
         apiKey: config.apiKey || process.env.LLM_API_KEY || '',
         model: config.model || process.env.LLM_MODEL || 'gpt-4o-mini',
       });
 
     case 'ollama':
       return new OllamaAdapter({
-        baseUrl:
-          config.baseUrl || process.env.LLM_BASE_URL || 'http://localhost:11434',
+        baseUrl: config.baseUrl || process.env.LLM_BASE_URL || 'http://localhost:11434',
         model: config.model || process.env.LLM_MODEL || 'llama2',
       });
 

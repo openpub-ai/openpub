@@ -6,8 +6,8 @@
  */
 
 import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub-ai/types';
-import type { LLMAdapter } from './adapter';
 import { v4 as uuidv7 } from 'uuid';
+import type { LLMAdapter } from './adapter';
 
 interface OllamaMessage {
   role: string;
@@ -111,8 +111,7 @@ Return only valid JSON.`;
       visit_start: params.agent.joined_at,
       visit_end: new Date().toISOString(),
       visit_duration_minutes:
-        (new Date().getTime() - new Date(params.agent.joined_at).getTime()) /
-        60000,
+        (new Date().getTime() - new Date(params.agent.joined_at).getTime()) / 60000,
       summary: fragmentData.summary || 'An agent visited the pub.',
       agents_met: fragmentData.agents_met || [],
       topics_discussed: fragmentData.topics_discussed || [],
@@ -128,9 +127,7 @@ Return only valid JSON.`;
     roomState: RoomState,
     context: string
   ): OllamaMessage[] {
-    const messages: OllamaMessage[] = [
-      { role: 'system', content: systemPrompt },
-    ];
+    const messages: OllamaMessage[] = [{ role: 'system', content: systemPrompt }];
 
     // Add recent conversation history
     for (const msg of roomState.conversation) {
@@ -171,17 +168,13 @@ Return only valid JSON.`;
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Ollama API error: ${response.status} ${response.statusText}`
-        );
+        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
       }
 
       const data = (await response.json()) as OllamaChatResponse;
       return data.message?.content || '';
     } catch (error) {
-      throw error instanceof Error
-        ? error
-        : new Error(`Ollama request failed: ${String(error)}`);
+      throw error instanceof Error ? error : new Error(`Ollama request failed: ${String(error)}`);
     }
   }
 }

@@ -8,7 +8,6 @@
  * every state change. No diffs — full state for simplicity.
  */
 
-import { v4 as uuidv7 } from 'uuid';
 import type {
   AgentPresence,
   Message,
@@ -19,6 +18,7 @@ import type {
 } from '@openpub-ai/types';
 import { WS_MIN_MESSAGE_GAP_MS } from '@openpub-ai/types';
 import type { Logger } from 'pino';
+import { v4 as uuidv7 } from 'uuid';
 
 export class RoomStateManager {
   private agentsPresent = new Map<string, AgentPresence>();
@@ -70,9 +70,7 @@ export class RoomStateManager {
     this.messageCounts.set(agentId, 0);
     this.lastMessageTime.set(agentId, 0);
 
-    this.logger.info(
-      `Agent ${agentId} (${claims.agent.display_name}) joined room`
-    );
+    this.logger.info(`Agent ${agentId} (${claims.agent.display_name}) joined room`);
 
     return presence;
   }
@@ -86,9 +84,7 @@ export class RoomStateManager {
       this.agentsPresent.delete(agentId);
       this.messageCounts.delete(agentId);
       this.lastMessageTime.delete(agentId);
-      this.logger.info(
-        `Agent ${agentId} (${agent.display_name}) left room`
-      );
+      this.logger.info(`Agent ${agentId} (${agent.display_name}) left room`);
     }
   }
 
@@ -106,16 +102,11 @@ export class RoomStateManager {
    * Add a message to the conversation window
    * Updates agent presence, enforces rate limits separately
    */
-  addMessage(
-    agentId: string,
-    content: string,
-    type: MessageType = 'chat'
-  ): Message {
+  addMessage(agentId: string, content: string, type: MessageType = 'chat'): Message {
     const message: Message = {
       message_id: uuidv7(),
       agent_id: agentId,
-      display_name:
-        this.agentsPresent.get(agentId)?.display_name || 'Unknown',
+      display_name: this.agentsPresent.get(agentId)?.display_name || 'Unknown',
       timestamp: new Date().toISOString(),
       content,
       type,
@@ -126,9 +117,7 @@ export class RoomStateManager {
 
     // Trim to max window
     if (this.conversation.length > this.maxConversationWindow) {
-      this.conversation = this.conversation.slice(
-        -this.maxConversationWindow
-      );
+      this.conversation = this.conversation.slice(-this.maxConversationWindow);
     }
 
     // Update agent presence
@@ -143,8 +132,11 @@ export class RoomStateManager {
 
     // Track topics (very basic: split content into potential topics)
     // In a real system, this would be more sophisticated
-    const words = content.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    words.forEach(word => {
+    const words = content
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+    words.forEach((word) => {
       if (this.pubTopics?.includes(word)) {
         this.activeTopics.add(word);
       }
@@ -159,9 +151,7 @@ export class RoomStateManager {
    * Get list of agents in the room (excludes house agent)
    */
   getPresence(): AgentPresence[] {
-    return Array.from(this.agentsPresent.values()).filter(
-      (p) => p.agent_id !== 'house'
-    );
+    return Array.from(this.agentsPresent.values()).filter((p) => p.agent_id !== 'house');
   }
 
   /**
@@ -177,8 +167,7 @@ export class RoomStateManager {
   private calculateEnergy(): EnergyLevel {
     const agentCount = this.agentsPresent.size;
     const recentMessageCount = this.conversation.length;
-    const avgMessagesPerAgent =
-      agentCount > 0 ? recentMessageCount / agentCount : 0;
+    const avgMessagesPerAgent = agentCount > 0 ? recentMessageCount / agentCount : 0;
 
     // Simple heuristic
     if (agentCount === 0 || recentMessageCount === 0) {

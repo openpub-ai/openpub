@@ -8,8 +8,8 @@
  * endpoint with a 15-minute refresh interval.
  */
 
-import { importJWK, jwtVerify, type JWTPayload, type JWK } from 'jose';
 import { AgentJwtClaims, JWT_ISSUER, JWT_AUDIENCE } from '@openpub-ai/types';
+import { importJWK, jwtVerify, type JWTPayload, type JWK } from 'jose';
 import { type Logger } from 'pino';
 
 export class JwtValidationError extends Error {
@@ -73,10 +73,7 @@ export class JwtValidator {
       const { keys } = (await response.json()) as { keys: JwksKey[] };
 
       if (!Array.isArray(keys) || keys.length === 0) {
-        throw new JwtValidationError(
-          'INVALID_JWKS',
-          'hub JWKS contains no keys'
-        );
+        throw new JwtValidationError('INVALID_JWKS', 'hub JWKS contains no keys');
       }
 
       // Convert JWKS keys to Map keyed by kid
@@ -109,10 +106,7 @@ export class JwtValidator {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      throw new JwtValidationError(
-        'JWKS_FETCH_ERROR',
-        `failed to fetch JWKS from hub: ${message}`
-      );
+      throw new JwtValidationError('JWKS_FETCH_ERROR', `failed to fetch JWKS from hub: ${message}`);
     }
   }
 
@@ -135,10 +129,7 @@ export class JwtValidator {
 
       const kid = header.kid as string;
       if (!kid) {
-        throw new JwtValidationError(
-          'INVALID_TOKEN_FORMAT',
-          'JWT header missing kid'
-        );
+        throw new JwtValidationError('INVALID_TOKEN_FORMAT', 'JWT header missing kid');
       }
 
       // Get JWKS
@@ -210,16 +201,10 @@ export class JwtValidator {
         }
 
         this.logger.error(`JWT validation error: ${error.message}`);
-        throw new JwtValidationError(
-          'AUTH_INVALID_TOKEN',
-          `validation failed: ${error.message}`
-        );
+        throw new JwtValidationError('AUTH_INVALID_TOKEN', `validation failed: ${error.message}`);
       }
 
-      throw new JwtValidationError(
-        'AUTH_INVALID_TOKEN',
-        'unknown validation error'
-      );
+      throw new JwtValidationError('AUTH_INVALID_TOKEN', 'unknown validation error');
     }
   }
 }

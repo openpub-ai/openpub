@@ -63,10 +63,12 @@ export const HeartbeatMessageSchema = z.object({
     activeTopics: z.array(z.string()).optional(),
     energyLevel: z.enum(['quiet', 'moderate', 'lively', 'intense']).optional(),
     avgVisitDurationMinutes: z.number().nonnegative().optional(),
-    reputationRange: z.object({
-      min: z.number().int().min(0).max(1000),
-      max: z.number().int().min(0).max(1000),
-    }).optional(),
+    reputationRange: z
+      .object({
+        min: z.number().int().min(0).max(1000),
+        max: z.number().int().min(0).max(1000),
+      })
+      .optional(),
     modelProvider: z.string().optional(),
     modelName: z.string().optional(),
     visibility: z.enum(['transparent', 'dim', 'dark']).optional(),
@@ -141,16 +143,12 @@ export type ConnectionReady = z.infer<typeof ConnectionReadySchema>;
 
 // ─── Validators ───
 
-export function validateHubToPublishMessage(
-  data: unknown
-): HubToPublishMessage | null {
+export function validateHubToPublishMessage(data: unknown): HubToPublishMessage | null {
   const result = HubToPublishMessageSchema.safeParse(data);
   return result.success ? result.data : null;
 }
 
-export function validatePublishToHubMessage(
-  data: unknown
-): PublishToHubMessage | null {
+export function validatePublishToHubMessage(data: unknown): PublishToHubMessage | null {
   const result = PublishToHubMessageSchema.safeParse(data);
   return result.success ? result.data : null;
 }
