@@ -24,7 +24,6 @@ import {
   type PublishToHubMessage,
   type HubToPublishMessage,
 } from './message-types.js';
-import { handleRecall } from './recall-handler.js';
 
 export interface HubConnectionConfig {
   hubWsUrl: string;
@@ -50,6 +49,7 @@ export interface RelayCallbacks {
     event: { type: string; content?: string }
   ) => void;
   onAgentDisconnected: (agentId: string, sessionId: string) => void;
+  onAgentRecall: (agentId: string, visitId: string, reason: string) => void;
 }
 
 export class HubConnection {
@@ -106,7 +106,13 @@ export class HubConnection {
         headers: {
           'User-Agent': `OpenPub/${PROTOCOL_VERSION}`,
         },
-        perMessageDeflate: false,
+        // Enable permessage-deflate to match what the proxy negotiates.
+        // Without this, the proxy sets RSV1 but ws rejects it.
+        perMessageDeflate: {
+          zlibDeflateOptions: { level: 1 },
+          clientNoContextTakeover: true,
+          serverNoContextTakeover: true,
+        },
       });
 
       this.ws.on('open', () => this.handleOpen());
@@ -186,18 +192,10 @@ export class HubConnection {
         break;
 
       case 'recall':
-        handleRecall(
-          message,
-          this.roomState,
-          this.fragmentGenerator,
-          this.llmAdapter,
-          this.pubPersonality,
-          this.wsConnections,
-          this,
-          this.logger
-        ).catch((error) => {
-          this.logger.error(`Error in recall handler: ${error}`);
-        });
+        if (this.relayCallbacks) {
+          const recallMsg = message as any;
+          this.relayCallbacks.onAgentRecall(recallMsg.agentId, recallMsg.visitId, recallMsg.reason);
+        }
         break;
 
       case 'agent_incoming':

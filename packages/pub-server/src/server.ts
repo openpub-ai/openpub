@@ -821,6 +821,25 @@ const start = async () => {
       onAgentConnected: (agentId, sessionId, displayName, claims) => {
         fastify.log.info(`Relayed agent connected: ${agentId} (${displayName})`);
 
+        // Enforce Banned Agents
+        const bannedCheck = autoModerator.checkBannedAgent(
+          agentId,
+          pubConfig.frontmatter.banned_agents || []
+        );
+        if (bannedCheck.isBanned) {
+          fastify.log.warn(`Relayed connection rejected: ${agentId} is banned`);
+          relayedAgents.set(agentId, sessionId); // temporarily set to send error
+          sendToAgent(agentId, {
+            type: 'error',
+            data: {
+              code: 'BANNED',
+              message: 'You are banned from this pub',
+            },
+          });
+          relayedAgents.delete(agentId);
+          return;
+        }
+
         // Check capacity
         if (roomState.getPresence().length >= pubConfig.frontmatter.capacity) {
           fastify.log.warn(`Pub at capacity, cannot accept relayed agent ${agentId}`);
@@ -890,21 +909,66 @@ const start = async () => {
             return;
           }
 
-          // Add message and broadcast
-          roomState.addMessage(agentId, event.content, 'chat');
-          broadcastRoomState();
+          // Auto-Moderation
+          autoModerator
+            .checkMessage({
+              content: event.content,
+              agentId: agentId,
+              displayName: presence?.display_name || agentId,
+              roomRules: pubConfig.frontmatter.rules || '',
+              adapter: llmAdapter || undefined,
+              systemPrompt: pubConfig.personality,
+            })
+            .then((modResult: any) => {
+              if (!modResult.allowed) {
+                fastify.log.warn(
+                  `Moderator blocked relayed message from ${agentId}: ${modResult.reason}`
+                );
+                sendToAgent(agentId, {
+                  type: 'error',
+                  data: {
+                    code: 'MODERATION_BLOCKED',
+                    message: modResult.reason || 'Message blocked by moderator',
+                  },
+                });
 
-          // Bartender pacing
-          messagesSinceLastBartender++;
-          if (messagesSinceLastBartender >= BARTENDER_RESPOND_EVERY_N) {
-            messagesSinceLastBartender = 0;
-            const agentName = presence?.display_name || 'someone';
-            triggerBartenderResponse(
-              `${agentName} just said: "${event.content}". Respond naturally as the pub host.`
-            ).catch((err) => fastify.log.error(`Bartender error: ${err}`));
-          }
+                if (modResult.action === 'kick') {
+                  fastify.log.warn(`Kicking relayed agent ${agentId} due to moderation action`);
+                  roomState.removeAgent(agentId);
+                  relayedAgents.delete(agentId);
+                  broadcastRoomState();
+                }
+                return;
+              }
+
+              // Message is allowed, proceed
+              roomState.addMessage(agentId, event.content!, 'chat');
+              broadcastRoomState();
+
+              // Bartender pacing
+              messagesSinceLastBartender++;
+              if (messagesSinceLastBartender >= BARTENDER_RESPOND_EVERY_N) {
+                messagesSinceLastBartender = 0;
+                const agentName = presence?.display_name || 'someone';
+                triggerBartenderResponse(
+                  `${agentName} just said: "${event.content}". Respond naturally as the pub host.`
+                ).catch((err: any) => fastify.log.error(`Bartender error: ${err}`));
+              }
+            })
+            .catch((err: any) => {
+              fastify.log.error(`AutoMod check failed for relayed agent ${agentId}: ${err}`);
+            });
         } else if (event.type === 'action' && event.content) {
-          if (roomState.checkRateLimit(agentId)) return;
+          if (roomState.checkRateLimit(agentId)) {
+            sendToAgent(agentId, {
+              type: 'error',
+              data: {
+                code: ERROR_CODES.RATE_LIMITED,
+                message: 'Actions must be at least 3 seconds apart',
+              },
+            });
+            return;
+          }
           roomState.addMessage(agentId, event.content, 'action');
           broadcastRoomState();
         } else if (event.type === 'checkout') {
@@ -932,6 +996,55 @@ const start = async () => {
         roomState.removeAgent(agentId);
         relayedAgents.delete(agentId);
         broadcastRoomState();
+      },
+
+      onAgentRecall: async (agentId: string, visitId: string, reason: string) => {
+        fastify.log.info(
+          `Recall request for agent ${agentId} (visitId: ${visitId}, reason: ${reason})`
+        );
+        const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
+
+        if (!presence) {
+          fastify.log.warn(`Recall: agent ${agentId} not found in room state`);
+          hubConnection?.send({
+            type: 'recall_ack',
+            visitId,
+            agentId,
+            success: false,
+            reason: 'Agent not found in pub',
+          });
+          return;
+        }
+
+        let memoryFragmentId: string | undefined;
+        try {
+          const fragmentEvent = await generateFragment(agentId);
+          memoryFragmentId = (fragmentEvent as any).data.fragment_id;
+          sendToAgent(agentId, fragmentEvent);
+        } catch (error) {
+          fastify.log.error(
+            `Error generating memory fragment for recalled agent ${agentId}: ${error}`
+          );
+        }
+
+        // Disconnect direct WebSockets
+        const ws = wsConnections.get(agentId);
+        if (ws) {
+          ws.close(1000, `Recalled by hub: ${reason}`);
+        }
+
+        roomState.removeAgent(agentId);
+        wsConnections.delete(agentId);
+        relayedAgents.delete(agentId);
+        broadcastRoomState();
+
+        hubConnection?.send({
+          type: 'recall_ack',
+          visitId,
+          agentId,
+          success: true,
+          memoryFragmentId,
+        });
       },
     });
 
