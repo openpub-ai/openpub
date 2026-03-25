@@ -106,7 +106,7 @@ export class HubConnection {
         headers: {
           'User-Agent': `OpenPub/${PROTOCOL_VERSION}`,
         },
-        // TODO: Add client certificate authentication if credentialId/Secret provided
+        perMessageDeflate: true,
       });
 
       this.ws.on('open', () => this.handleOpen());
