@@ -8,7 +8,7 @@
  * endpoint with a 15-minute refresh interval.
  */
 
-import { importJWK, jwtVerify, type JWTPayload } from 'jose';
+import { importJWK, jwtVerify, type JWTPayload, type JWK } from 'jose';
 import { AgentJwtClaims, JWT_ISSUER, JWT_AUDIENCE } from '@openpub-ai/types';
 import { type Logger } from 'pino';
 
@@ -33,14 +33,14 @@ interface JwksKey {
 }
 
 interface CachedKey {
-  key: JsonWebKey;
+  key: JWK;
   algorithm: string;
   timestamp: number;
 }
 
 export class JwtValidator {
   private keyCache = new Map<string, CachedKey>();
-  private jwksCache: Map<string, JsonWebKey> | null = null;
+  private jwksCache: Map<string, JWK> | null = null;
   private jwksCacheTimestamp: number = 0;
   private readonly JWKS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -49,7 +49,7 @@ export class JwtValidator {
     private logger: Logger
   ) {}
 
-  private async fetchJwks(): Promise<Map<string, JsonWebKey>> {
+  private async fetchJwks(): Promise<Map<string, JWK>> {
     // Check cache validity
     const now = Date.now();
     if (this.jwksCache && now - this.jwksCacheTimestamp < this.JWKS_CACHE_TTL_MS) {
@@ -88,7 +88,7 @@ export class JwtValidator {
         }
 
         // Convert to JsonWebKey format for jose
-        const jsonWebKey: JsonWebKey = {
+        const jsonWebKey: JWK = {
           kty: jwk.kty,
           crv: jwk.crv,
           x: jwk.x,

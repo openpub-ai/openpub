@@ -158,6 +158,7 @@ Be lenient. The rules exist to maintain a welcoming space, not to censor.`;
           timestamp: new Date().toISOString(),
           agents_present: [],
           conversation: [],
+          conversation_window_size: 100,
           atmosphere: {
             tone: 'neutral',
             active_topics: [],

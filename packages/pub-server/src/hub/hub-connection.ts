@@ -103,13 +103,15 @@ export class HubConnection {
     this.logger.info('Connected to hub');
     this.reconnectAttempts = 0;
 
-    // Send init handshake
+    // Send init handshake (includes credentials if configured)
     const init: PubConnectionInit = {
       type: 'init',
       pubId: this.config.pubId,
       pubName: this.config.pubName,
       version: PROTOCOL_VERSION,
       capacity: this.config.capacity,
+      ...(this.config.credentialId && { credentialId: this.config.credentialId }),
+      ...(this.config.credentialSecret && { credentialSecret: this.config.credentialSecret }),
     };
 
     this.send(init);

@@ -15,6 +15,10 @@ export interface PubConfig {
   frontmatter: {
     name: string;
     capacity: number;
+    model?: string;
+    visibility?: string;
+    auto_mod?: boolean;
+    rules?: string;
     entry?: {
       min_reputation?: number;
       entry_type?: string;

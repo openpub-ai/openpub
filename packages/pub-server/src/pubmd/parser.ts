@@ -36,7 +36,7 @@ export function parsePubMd(filePath: string): PubMdConfig {
       personality: content.trim(),
     };
   } catch (error) {
-    if (error instanceof fs.promises.FileNotFoundError || (error as any).code === 'ENOENT') {
+    if ((error as any).code === 'ENOENT') {
       throw new PubMdParseError(`file not found: ${filePath}`);
     }
 

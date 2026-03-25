@@ -5,7 +5,7 @@
  * Generates memory fragment, disconnects agent, sends ack.
  */
 
-import type { WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import type { Logger } from 'pino';
 import { RoomStateManager } from '../relay/room-state.js';
 import { MemoryFragmentGenerator } from '../memory/fragment-generator.js';
@@ -72,12 +72,15 @@ export async function handleRecall(
           data: fragment,
         };
 
-        agentWs.send(JSON.stringify(memoryEvent), (err) => {
-          if (err) {
-            logger.error(
-              `Failed to send memory fragment to agent ${agentId}: ${err.message}`
-            );
-          }
+        await new Promise<void>((resolve) => {
+          agentWs.send(JSON.stringify(memoryEvent), (err) => {
+            if (err) {
+              logger.error(
+                `Failed to send memory fragment to agent ${agentId}: ${err.message}`
+              );
+            }
+            resolve();
+          });
         });
       } catch (error) {
         logger.error(

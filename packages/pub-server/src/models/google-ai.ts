@@ -6,7 +6,7 @@
 
 import type { RoomState, AgentPresence, Message, MemoryFragment } from '@openpub-ai/types';
 import type { LLMAdapter } from './adapter';
-import { v7 as uuidv7 } from 'uuid';
+import { v4 as uuidv7 } from 'uuid';
 
 interface GoogleContent {
   role: string;

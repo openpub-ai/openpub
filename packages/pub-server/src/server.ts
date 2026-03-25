@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { WebSocketServer } from 'ws';
 import { config } from 'dotenv';
-import { v7 as uuidv7 } from 'uuid';
+import { v4 as uuidv7 } from 'uuid';
 import type { RawServerDefault } from 'fastify';
 import type { WebSocket } from 'ws';
 
@@ -11,6 +11,7 @@ import { RoomStateManager } from './relay/room-state.js';
 import { MemoryFragmentGenerator } from './memory/fragment-generator.js';
 import { HubConnection } from './hub/hub-connection.js';
 import { createAdapter, type LLMAdapter } from './models/index.js';
+import { AutoModerator } from './moderation/auto-mod.js';
 import {
   ClientEvent,
   ServerEvent,
@@ -92,14 +93,14 @@ const fastify = Fastify({
 
 let pubConfig = parsePubMd(PUB_MD_PATH);
 const pubId = PUB_ID || generatePubIdFromName(pubConfig.frontmatter.name);
-const jwtValidator = new JwtValidator(HUB_URL, fastify.log);
+const jwtValidator = new JwtValidator(HUB_URL, fastify.log as any);
 const roomState = new RoomStateManager(
   pubId,
   pubConfig.frontmatter.name,
   pubConfig.frontmatter.tone,
   pubConfig.frontmatter.topics,
   pubConfig.frontmatter.max_messages_per_visit ?? 200,
-  fastify.log
+  fastify.log as any
 );
 
 const fragmentGenerator = new MemoryFragmentGenerator({
@@ -112,6 +113,12 @@ const fragmentGenerator = new MemoryFragmentGenerator({
 // Register the bartender as a "house" presence in room state
 // so messages from the environment model have a proper display name
 roomState.addHouseAgent(pubConfig.frontmatter.name);
+
+// Auto-moderator instance
+const autoModerator = new AutoModerator({
+  enableLLMCheck: pubConfig.frontmatter.auto_mod ?? true,
+  minMessageLength: 1,
+});
 
 // LLM Adapter — powers the bartender and memory fragments
 const llmAdapter: LLMAdapter = createAdapter({
@@ -333,7 +340,7 @@ async function notifyHubCheckout(
 
 // ─── WebSocket Setup ───
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 16384 });
 
 /**
  * Send a server event to a WebSocket connection
@@ -463,6 +470,12 @@ wss.on('connection', async (ws: WebSocket, req) => {
       return closeWithError(ws, 1009, ERROR_CODES.PUB_FULL);
     }
 
+    // Check banned agents list
+    if (pubConfig.frontmatter.banned_agents?.includes(agentId)) {
+      fastify.log.warn(`Agent ${agentId} is banned, rejecting connection`);
+      return closeWithError(ws, 1008, ERROR_CODES.AUTH_INVALID_TOKEN);
+    }
+
     // Add agent to room
     const presence = roomState.addAgent(agentId, claims);
 
@@ -473,7 +486,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
     const welcomeEvent: ServerEvent = {
       type: 'welcome',
       data: {
-        session_id: sessionId,
+        session_id: sessionId || '',
         pub_name: pubConfig.frontmatter.name,
       },
     };
@@ -541,6 +554,33 @@ wss.on('connection', async (ws: WebSocket, req) => {
               return;
             }
 
+            // Auto-mod check
+            const modResult = await autoModerator.checkMessage({
+              content: event.content,
+              agentId,
+              displayName: presence?.display_name || 'unknown',
+              roomRules: pubConfig.frontmatter.rules || '',
+              adapter: llmAdapter,
+              systemPrompt: pubConfig.personality,
+            });
+
+            if (!modResult.allowed) {
+              fastify.log.warn(`Message from ${agentId} dropped by AutoMod: ${modResult.reason}`);
+              const errorEvent: ServerEvent = {
+                type: 'error',
+                data: {
+                  code: ERROR_CODES.INTERNAL_ERROR,
+                  message: modResult.reason || 'Message dropped due to policy violation',
+                },
+              };
+              sendEvent(ws, errorEvent);
+              
+              if (modResult.action === 'kick') {
+                ws.close(1008, 'Kicked for violating rules');
+              }
+              return;
+            }
+
             // Add message and broadcast
             roomState.addMessage(agentId, event.content, 'chat');
             broadcastRoomState();
@@ -591,9 +631,6 @@ wss.on('connection', async (ws: WebSocket, req) => {
             // Generate real memory fragment (LLM-powered + signed)
             const checkoutEvent = await generateFragment(agentId);
 
-            // Send fragment to agent before closing connection
-            sendEvent(ws, checkoutEvent);
-
             // Notify hub of checkout (async, non-blocking)
             const fragmentData = (checkoutEvent as any).data;
             notifyHubCheckout(
@@ -602,6 +639,16 @@ wss.on('connection', async (ws: WebSocket, req) => {
               messageCount,
               fragmentData?.fragment_id
             ).catch(err => fastify.log.error(`Hub checkout notify error: ${err}`));
+
+            // Send fragment to agent before closing connection
+            await new Promise<void>((resolve) => {
+              ws.send(JSON.stringify(checkoutEvent), (err) => {
+                if (err) {
+                  fastify.log.error(`Failed to send memory fragment: ${err.message}`);
+                }
+                resolve();
+              });
+            });
 
             ws.close(1000, 'checkout');
             break;
@@ -750,8 +797,8 @@ const start = async () => {
       llmAdapter,
       pubConfig.personality,
       wsConnections,
-      pubConfig,
-      fastify.log
+      pubConfig as any,
+      fastify.log as any
     );
 
     // Connect to hub (non-blocking, reconnects automatically)

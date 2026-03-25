@@ -125,6 +125,8 @@ export const PubConnectionInitSchema = z.object({
   pubName: z.string().min(1).max(64),
   version: z.string(),
   capacity: z.number().int().positive(),
+  credentialId: z.string().uuid().optional(),
+  credentialSecret: z.string().min(1).optional(),
 });
 
 export type PubConnectionInit = z.infer<typeof PubConnectionInitSchema>;

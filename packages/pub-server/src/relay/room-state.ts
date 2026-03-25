@@ -8,7 +8,7 @@
  * every state change. No diffs — full state for simplicity.
  */
 
-import { v7 as uuidv7 } from 'uuid';
+import { v4 as uuidv7 } from 'uuid';
 import type {
   AgentPresence,
   Message,
