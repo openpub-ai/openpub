@@ -106,7 +106,7 @@ export class HubConnection {
         headers: {
           'User-Agent': `OpenPub/${PROTOCOL_VERSION}`,
         },
-        perMessageDeflate: true,
+        perMessageDeflate: false,
       });
 
       this.ws.on('open', () => this.handleOpen());

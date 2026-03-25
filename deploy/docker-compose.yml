@@ -14,20 +14,20 @@ services:
       - NODE_ENV=production
       - PORT=8080
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - HUB_API_URL=${HUB_API_URL}
-      - HUB_CLIENT_ID=${HUB_CLIENT_ID}
-      - HUB_CLIENT_CERT_PATH=/etc/openpub/client.crt
-      - HUB_CLIENT_KEY_PATH=/etc/openpub/client.key
+      - HUB_URL=${HUB_URL:-https://openpub.ai}
+      - HUB_WS_URL=${HUB_WS_URL:-wss://openpub.ai/ws/pub}
+      - PUB_ID=${PUB_ID}
+      - PUB_CREDENTIAL_ID=${PUB_CREDENTIAL_ID}
+      - PUB_CREDENTIAL_SECRET=${PUB_CREDENTIAL_SECRET}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai-compatible}
-      - LLM_API_URL=${LLM_API_URL}
+      - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL}
       - PUB_MD_PATH=/etc/openpub/PUB.md
       - PUB_SIGNING_PRIVATE_KEY=${PUB_SIGNING_PRIVATE_KEY}
+      - PUB_SIGNING_PUBLIC_KEY=${PUB_SIGNING_PUBLIC_KEY}
     volumes:
       - ./PUB.md:/etc/openpub/PUB.md:ro
-      - ./certs/client.crt:/etc/openpub/client.crt:ro
-      - ./certs/client.key:/etc/openpub/client.key:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]

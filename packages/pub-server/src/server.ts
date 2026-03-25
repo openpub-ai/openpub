@@ -303,7 +303,7 @@ async function notifyHubCheckout(
   fragmentId?: string
 ): Promise<void> {
   try {
-    const response = await fetch(`${HUB_URL}/api/v1/checkout`, {
+    const response = await fetch(`${HUB_URL}/checkout`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
