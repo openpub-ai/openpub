@@ -117,7 +117,7 @@ export class HubConnection {
 
       this.ws.on('open', () => this.handleOpen());
       this.ws.on('message', (data) => this.handleMessage(data));
-      this.ws.on('close', () => this.handleClose());
+      this.ws.on('close', (code, reason) => this.handleClose(code, reason));
       this.ws.on('error', (error) => this.handleError(error));
     } catch (error) {
       this.logger.error(`Failed to create WebSocket connection: ${error}`);
@@ -244,11 +244,8 @@ export class HubConnection {
     }
   }
 
-  /**
-   * WebSocket close handler
-   */
-  private handleClose = (): void => {
-    this.logger.info('Disconnected from hub');
+  private handleClose = (code?: number, reason?: Buffer): void => {
+    this.logger.info(`Disconnected from hub (code: ${code}, reason: ${reason?.toString()})`);
     this.stopHeartbeat();
 
     if (!this.isShuttingDown) {
