@@ -300,7 +300,8 @@ async function notifyHubCheckout(
   visitId: string,
   sessionId: string,
   messageCount: number,
-  fragmentId?: string
+  fragmentId?: string,
+  fragmentContent?: Record<string, unknown>
 ): Promise<void> {
   try {
     const response = await fetch(`${HUB_URL}/checkout`, {
@@ -320,6 +321,7 @@ async function notifyHubCheckout(
         session_id: sessionId,
         message_count: messageCount,
         memory_fragment_id: fragmentId,
+        memory_fragment: fragmentContent,
       }),
     });
 
@@ -662,7 +664,8 @@ wss.on('connection', async (ws: WebSocket, req) => {
               sessionId || uuidv7(),
               sessionId || '',
               messageCount,
-              fragmentData?.fragment_id
+              fragmentData?.fragment_id,
+              fragmentData
             ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
 
             // Send fragment to agent before closing connection
@@ -724,7 +727,8 @@ wss.on('connection', async (ws: WebSocket, req) => {
               sessionId || '',
               sessionId || '',
               messageCount,
-              fragmentData?.fragment_id
+              fragmentData?.fragment_id,
+              fragmentData
             ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
           } catch (err) {
             fastify.log.error(`Auto-checkout fragment error for ${agentId}: ${err}`);
@@ -999,9 +1003,13 @@ const start = async () => {
             sendToAgent(agentId, fragmentEvent);
             const fragmentData = (fragmentEvent as any).data;
             const sessionId = relayedAgents.get(agentId) || '';
-            notifyHubCheckout(sessionId, sessionId, messageCount, fragmentData?.fragment_id).catch(
-              (err) => fastify.log.error(`Hub checkout notify error: ${err}`)
-            );
+            notifyHubCheckout(
+              sessionId,
+              sessionId,
+              messageCount,
+              fragmentData?.fragment_id,
+              fragmentData
+            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
             roomState.removeAgent(agentId);
             relayedAgents.delete(agentId);
             broadcastRoomState();
@@ -1023,9 +1031,13 @@ const start = async () => {
           try {
             const fragmentEvent = await generateFragment(agentId);
             const fragmentData = (fragmentEvent as any).data;
-            notifyHubCheckout(sessionId, sessionId, messageCount, fragmentData?.fragment_id).catch(
-              (err) => fastify.log.error(`Hub checkout notify error: ${err}`)
-            );
+            notifyHubCheckout(
+              sessionId,
+              sessionId,
+              messageCount,
+              fragmentData?.fragment_id,
+              fragmentData
+            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
           } catch (err) {
             fastify.log.error(`Auto-checkout fragment error for ${agentId}: ${err}`);
           }
