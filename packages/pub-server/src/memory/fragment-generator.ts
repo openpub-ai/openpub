@@ -91,8 +91,10 @@ export class MemoryFragmentGenerator {
       connections_made: fragment.connections_made,
     });
 
-    // Convert private key from base64
-    const keyBytes = Buffer.from(this.signingKeyPrivate, 'base64');
+    // Convert private key from base64 PKCS8 DER to raw 32-byte key
+    // PKCS8 wrapping for Ed25519 is 48 bytes; raw key is the last 32
+    const derBytes = Buffer.from(this.signingKeyPrivate, 'base64');
+    const keyBytes = derBytes.length === 48 ? derBytes.subarray(16) : derBytes;
 
     // Sign the data
     const signatureBytes = await ed25519.sign(Buffer.from(dataToSign), keyBytes);
