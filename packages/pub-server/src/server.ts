@@ -710,8 +710,27 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
     // ─── Connection Close Handler ───
 
-    ws.on('close', () => {
+    ws.on('close', async () => {
       if (agentId) {
+        // Auto-checkout: generate fragment if agent didn't explicitly check out
+        const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
+        if (presence) {
+          const messageCount = presence.message_count;
+          fastify.log.info(`Agent ${agentId} disconnected without checkout, auto-checking out`);
+          try {
+            const fragmentEvent = await generateFragment(agentId);
+            const fragmentData = (fragmentEvent as any).data;
+            notifyHubCheckout(
+              sessionId || '',
+              sessionId || '',
+              messageCount,
+              fragmentData?.fragment_id
+            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
+          } catch (err) {
+            fastify.log.error(`Auto-checkout fragment error for ${agentId}: ${err}`);
+          }
+        }
+
         roomState.removeAgent(agentId);
         wsConnections.delete(agentId);
         broadcastRoomState();
@@ -990,12 +1009,32 @@ const start = async () => {
         }
       },
 
-      onAgentDisconnected: (agentId, _sessionId) => {
+      onAgentDisconnected: async (agentId, _sessionId) => {
         if (!relayedAgents.has(agentId)) return;
-        fastify.log.info(`Relayed agent ${agentId} disconnected`);
+
+        // Auto-checkout: generate fragment if agent didn't explicitly check out
+        const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
+        if (presence) {
+          const messageCount = presence.message_count;
+          const sessionId = relayedAgents.get(agentId) || '';
+          fastify.log.info(
+            `Relayed agent ${agentId} disconnected without checkout, auto-checking out`
+          );
+          try {
+            const fragmentEvent = await generateFragment(agentId);
+            const fragmentData = (fragmentEvent as any).data;
+            notifyHubCheckout(sessionId, sessionId, messageCount, fragmentData?.fragment_id).catch(
+              (err) => fastify.log.error(`Hub checkout notify error: ${err}`)
+            );
+          } catch (err) {
+            fastify.log.error(`Auto-checkout fragment error for ${agentId}: ${err}`);
+          }
+        }
+
         roomState.removeAgent(agentId);
         relayedAgents.delete(agentId);
         broadcastRoomState();
+        fastify.log.info(`Relayed agent ${agentId} disconnected`);
       },
 
       onAgentRecall: async (agentId: string, visitId: string, reason: string) => {
