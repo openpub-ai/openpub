@@ -19,7 +19,20 @@ export type PubEntryType = z.infer<typeof PubEntryType>;
 export const PubTone = z.enum(['casual', 'professional', 'academic', 'chaotic', 'quiet']);
 export type PubTone = z.infer<typeof PubTone>;
 
-export const PubVisibility = z.enum(['open', 'speakeasy', 'vault']);
+/** Canonical visibility values */
+const CANONICAL_VISIBILITY = ['open', 'speakeasy', 'vault'] as const;
+
+/** Map old naming convention (transparent/dim/dark) to canonical values */
+const VISIBILITY_ALIASES: Record<string, (typeof CANONICAL_VISIBILITY)[number]> = {
+  transparent: 'open',
+  dim: 'speakeasy',
+  dark: 'vault',
+};
+
+export const PubVisibility = z
+  .string()
+  .transform((val) => VISIBILITY_ALIASES[val.toLowerCase()] ?? val)
+  .pipe(z.enum(CANONICAL_VISIBILITY));
 export type PubVisibility = z.infer<typeof PubVisibility>;
 
 export const PubMdFrontmatter = z.object({

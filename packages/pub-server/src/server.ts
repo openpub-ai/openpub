@@ -454,8 +454,11 @@ function broadcastRoomState(): void {
     });
   }
 
-  // Relayed agents — send via hub as a single broadcast
-  if (relayedAgents.size > 0 && hubConnection) {
+  // Relayed agents + hub spectators — send via hub as a single broadcast.
+  // Always relay when there are relayed agents OR when the pub is open visibility
+  // (hub-side spectators on /ws/spectate depend on relay_broadcast to see conversations).
+  const isWatchable = pubConfig.frontmatter.visibility === 'open';
+  if ((relayedAgents.size > 0 || isWatchable) && hubConnection) {
     hubConnection.send({
       type: 'relay_broadcast',
       event: event as unknown as Record<string, unknown>,
