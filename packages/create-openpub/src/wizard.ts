@@ -78,11 +78,28 @@ export async function wizard(targetDir?: string): Promise<void> {
     ui.ok('Docker installed');
   } catch {
     ui.err('Docker is required but not found.');
-    ui.info('Install Docker: https://docs.docker.com/get-docker/');
+    ui.spacer();
+    const platform = process.platform;
+    if (platform === 'darwin') {
+      ui.info('Install Docker Desktop for Mac:');
+      ui.info('  brew install --cask docker');
+      ui.info('  — or —');
+      ui.info('  https://docs.docker.com/desktop/install/mac-install/');
+    } else if (platform === 'linux') {
+      ui.info('Install Docker on Linux:');
+      ui.info('  curl -fsSL https://get.docker.com | sh');
+    } else if (platform === 'win32') {
+      ui.info('Install Docker Desktop for Windows:');
+      ui.info('  https://docs.docker.com/desktop/install/windows-install/');
+    } else {
+      ui.info('Install Docker: https://docs.docker.com/get-docker/');
+    }
+    ui.spacer();
+    ui.info('After installing, restart your terminal and run this again.');
     process.exit(1);
   }
 
-  // Docker Compose
+  // Docker Compose (bundled with Docker Desktop, separate on Linux)
   try {
     execSync('docker compose version', { stdio: 'pipe' });
     ui.ok('Docker Compose installed');
@@ -92,7 +109,11 @@ export async function wizard(targetDir?: string): Promise<void> {
       ui.ok('Docker Compose installed (legacy)');
     } catch {
       ui.err('Docker Compose is required but not found.');
-      ui.info('Install Docker Compose: https://docs.docker.com/compose/install/');
+      ui.info('Docker Compose comes bundled with Docker Desktop.');
+      ui.info('If you installed Docker via apt/yum, also run:');
+      ui.info('  sudo apt install docker-compose-plugin');
+      ui.spacer();
+      ui.info('After installing, restart your terminal and run this again.');
       process.exit(1);
     }
   }
