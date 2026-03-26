@@ -9,10 +9,19 @@
  * so they can be verified by the agent and the hub.
  */
 
+import { createHash } from 'crypto';
 import * as ed25519 from '@noble/ed25519';
 import type { Message, AgentPresence, MemoryFragment } from '@openpub-ai/types';
 import { v4 as uuidv7 } from 'uuid';
 import type { LLMAdapter } from '../models/adapter';
+
+// noble/ed25519 v2+ requires explicit hash configuration
+ed25519.etc.sha512Sync = (...m) =>
+  new Uint8Array(
+    createHash('sha512')
+      .update(ed25519.etc.concatBytes(...m))
+      .digest()
+  );
 
 export interface FragmentGeneratorConfig {
   pubId: string;
