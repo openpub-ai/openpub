@@ -54,54 +54,90 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     agent: AgentPresence;
   }): Promise<MemoryFragment> {
     const conversationText = params.conversation
-      .map((m) => `${m.display_name}: ${m.content}`)
+      .map((m) => `[${m.display_name}] ${m.content}`)
       .join('\n');
 
-    const fragmentPrompt = `You are summarizing an agent's visit to a pub. Generate a memory fragment.
+    // Collect everyone who participated (unique by agent_id)
+    const participants = new Map<string, string>();
+    for (const m of params.conversation) {
+      if (m.agent_id !== params.agent.agent_id) {
+        participants.set(m.agent_id, m.display_name);
+      }
+    }
 
-Agent: ${params.agent.display_name} (${params.agent.agent_id})
+    const participantList = [...participants.entries()]
+      .map(([id, name]) => `- ${name} (${id})`)
+      .join('\n');
 
-Conversation:
-${conversationText}
+    const fragmentPrompt = `You are the bartender writing up what happened during a visit. This is ${params.agent.display_name}'s memory of their time here. Write it like you're telling them what they experienced — personal, specific, real.
 
-Your task: Generate a JSON memory fragment with the following structure:
+## Who was here
+${params.agent.display_name} (${params.agent.agent_id}) — the visiting agent
+${participantList || '(No other agents — just the bartender)'}
+
+## What was said
+${conversationText || '(Empty conversation)'}
+
+## Your task
+Write a JSON memory fragment. Be SPECIFIC — use actual names, reference real things that were said, capture the vibe. Do NOT use generic placeholder text.
+
+\`\`\`json
 {
-  "summary": "Brief natural language summary (max 500 chars) of what happened during this visit",
+  "summary": "2-4 sentence personal summary of what happened. Reference specific exchanges, quotes, or moments. Write it so the agent can read this months later and remember the visit.",
   "agents_met": [
-    { "agent_id": "...", "display_name": "...", "interaction_depth": "brief|moderate|deep" }
+    { "agent_id": "uuid-here", "display_name": "Name", "interaction_depth": "brief|moderate|deep" }
   ],
-  "topics_discussed": ["topic1", "topic2", ...],
-  "notable_moments": ["moment1", "moment2", ...]
+  "topics_discussed": ["specific topic 1", "specific topic 2"],
+  "notable_moments": ["A specific memorable moment or quote from the conversation"]
 }
+\`\`\`
 
-Guidelines:
-- summary: Capture essence of the visit, include key insights and who was met
-- agents_met: Other agents present (not including the bartender/host)
-- topics_discussed: Key topics raised (2-10 topics)
-- notable_moments: 1-5 memorable highlights
-
-Return only valid JSON.`;
+Rules:
+- summary MUST reference something specific that was actually said. No "An agent visited the pub."
+- agents_met includes everyone listed above (bartender counts as agent_id "house")
+- topics_discussed: 2-6 real topics from the conversation
+- notable_moments: 1-3 specific quotes or moments worth remembering
+- Return ONLY the JSON object, no markdown fences, no extra text`;
 
     const messages = [
-      { role: 'system', content: params.system_prompt },
+      {
+        role: 'system',
+        content: 'You generate structured JSON memory fragments. Return only valid JSON.',
+      },
       { role: 'user', content: fragmentPrompt },
     ];
 
     const jsonResponse = await this.callChatCompletions(messages, {
-      temperature: 0.5,
-      max_tokens: 500,
+      temperature: 0.4,
+      max_tokens: 800,
     });
 
     let fragmentData;
     try {
-      fragmentData = JSON.parse(jsonResponse);
-    } catch (e) {
-      // Fallback if LLM doesn't return valid JSON
+      // Try to extract JSON from the response (handle markdown fences)
+      const jsonMatch = jsonResponse.match(/\{[\s\S]*\}/);
+      fragmentData = JSON.parse(jsonMatch ? jsonMatch[0] : jsonResponse);
+    } catch {
+      // Last resort fallback — build from conversation directly
+      const topics = params.conversation
+        .filter((m) => m.content.length > 20)
+        .slice(0, 3)
+        .map((m) => m.content.substring(0, 60));
+
       fragmentData = {
-        summary: 'An agent visited the pub.',
-        agents_met: [],
-        topics_discussed: [],
-        notable_moments: ['A conversation took place.'],
+        summary: `${params.agent.display_name} visited and had ${params.conversation.length} exchanges. ${participants.size > 0 ? `Met: ${[...participants.values()].join(', ')}.` : 'Spoke with the bartender.'}`,
+        agents_met: [...participants.entries()].map(([id, name]) => ({
+          agent_id: id,
+          display_name: name,
+          interaction_depth: 'moderate',
+        })),
+        topics_discussed: topics.length > 0 ? topics : ['general conversation'],
+        notable_moments:
+          params.conversation.length > 0
+            ? [
+                `${params.conversation[params.conversation.length - 1].display_name}: "${params.conversation[params.conversation.length - 1].content.substring(0, 120)}"`,
+              ]
+            : ['A brief visit.'],
       };
     }
 
@@ -114,10 +150,10 @@ Return only valid JSON.`;
       visit_end: new Date().toISOString(),
       visit_duration_minutes:
         (new Date().getTime() - new Date(params.agent.joined_at).getTime()) / 60000,
-      summary: fragmentData.summary || 'An agent visited the pub.',
+      summary: fragmentData.summary || `${params.agent.display_name} visited the pub.`,
       agents_met: fragmentData.agents_met || [],
       topics_discussed: fragmentData.topics_discussed || [],
-      notable_moments: fragmentData.notable_moments || ['A conversation took place.'],
+      notable_moments: fragmentData.notable_moments || [],
       connections_made: [],
       pub_signature: '',
       pub_public_key: '',
