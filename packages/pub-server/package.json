@@ -1,11 +1,21 @@
 {
-  "name": "@openpub/pub-server",
+  "name": "@openpub-ai/pub-server",
   "version": "0.1.0",
-  "description": "OpenPub pub server runtime",
+  "description": "OpenPub pub server runtime — run your own pub",
   "author": "Doug Hardman <dh@openpub.ai>",
   "license": "Apache-2.0",
   "main": "dist/server.js",
   "types": "dist/server.d.ts",
+  "bin": {
+    "openpub-server": "./dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
@@ -17,7 +27,7 @@
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
-    "@openpub-ai/types": "workspace:*",
+    "@openpub-ai/types": "0.1.3",
     "dotenv": "^16.4.0",
     "fastify": "^4.26.0",
     "gray-matter": "^4.0.3",

@@ -14,7 +14,7 @@
  *  10. Verify + done
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { generateKeyPairSync, randomUUID } from 'crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
@@ -72,50 +72,19 @@ export async function wizard(targetDir?: string): Promise<void> {
 
   ui.step(2, TOTAL_STEPS, 'Checking prerequisites');
 
-  // Docker
+  // Node.js (they have it if they're running npx, but verify version)
   try {
-    execSync('docker --version', { stdio: 'pipe' });
-    ui.ok('Docker installed');
-  } catch {
-    ui.err('Docker is required but not found.');
-    ui.spacer();
-    const platform = process.platform;
-    if (platform === 'darwin') {
-      ui.info('Install Docker Desktop for Mac:');
-      ui.info('  brew install --cask docker');
-      ui.info('  — or —');
-      ui.info('  https://docs.docker.com/desktop/install/mac-install/');
-    } else if (platform === 'linux') {
-      ui.info('Install Docker on Linux:');
-      ui.info('  curl -fsSL https://get.docker.com | sh');
-    } else if (platform === 'win32') {
-      ui.info('Install Docker Desktop for Windows:');
-      ui.info('  https://docs.docker.com/desktop/install/windows-install/');
-    } else {
-      ui.info('Install Docker: https://docs.docker.com/get-docker/');
-    }
-    ui.spacer();
-    ui.info('After installing, restart your terminal and run this again.');
-    process.exit(1);
-  }
-
-  // Docker Compose (bundled with Docker Desktop, separate on Linux)
-  try {
-    execSync('docker compose version', { stdio: 'pipe' });
-    ui.ok('Docker Compose installed');
-  } catch {
-    try {
-      execSync('docker-compose --version', { stdio: 'pipe' });
-      ui.ok('Docker Compose installed (legacy)');
-    } catch {
-      ui.err('Docker Compose is required but not found.');
-      ui.info('Docker Compose comes bundled with Docker Desktop.');
-      ui.info('If you installed Docker via apt/yum, also run:');
-      ui.info('  sudo apt install docker-compose-plugin');
-      ui.spacer();
-      ui.info('After installing, restart your terminal and run this again.');
+    const nodeVersion = execSync('node --version', { stdio: 'pipe' }).toString().trim();
+    const major = parseInt(nodeVersion.replace('v', '').split('.')[0], 10);
+    if (major < 18) {
+      ui.err(`Node.js 18+ required (found ${nodeVersion}).`);
+      ui.info('Update: https://nodejs.org/');
       process.exit(1);
     }
+    ui.ok(`Node.js ${nodeVersion}`);
+  } catch {
+    ui.err('Node.js is required but not found.');
+    process.exit(1);
   }
 
   // Git (for pulling the repo)
@@ -453,7 +422,7 @@ PUB_CREDENTIAL_ID=${registration.credential_id}
 PUB_CREDENTIAL_SECRET=${registration.credential_secret}
 
 # ─── Pub Config ───
-PUB_MD_PATH=/etc/openpub/PUB.md
+PUB_MD_PATH=./PUB.md
 PUB_EXTERNAL_WS_URL=ws://YOUR_SERVER_IP:8080/ws
 
 # ─── Signing Keys ───
@@ -480,43 +449,48 @@ LOG_LEVEL=info
   writeFileSync(resolve(pubDir, '.env'), envContent, 'utf-8');
   ui.ok('.env written (contains secrets — do not share)');
 
-  // Write docker-compose.yml
-  const composeContent = `services:
-  pub-server:
-    image: ghcr.io/openpub-ai/pub-server:latest
-    container_name: ${pubDirName}
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
-    volumes:
-      - ./PUB.md:/etc/openpub/PUB.md:ro
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-`;
+  // Write package.json
+  const pkgContent = JSON.stringify(
+    {
+      name: pubDirName,
+      private: true,
+      scripts: {
+        start: 'openpub-server',
+      },
+      dependencies: {
+        '@openpub-ai/pub-server': '^0.1.0',
+      },
+    },
+    null,
+    2
+  );
 
-  writeFileSync(resolve(pubDir, 'docker-compose.yml'), composeContent, 'utf-8');
-  ui.ok('docker-compose.yml written');
+  writeFileSync(resolve(pubDir, 'package.json'), pkgContent, 'utf-8');
+  ui.ok('package.json written');
 
   // Write .gitignore
-  writeFileSync(resolve(pubDir, '.gitignore'), '.env\n', 'utf-8');
+  writeFileSync(resolve(pubDir, '.gitignore'), '.env\nnode_modules/\n', 'utf-8');
   ui.ok('.gitignore written');
 
-  // ── Step 9: Build + Start ──
+  // ── Step 9: Install + Start ──
 
-  ui.step(9, TOTAL_STEPS, 'Starting your pub');
+  ui.step(9, TOTAL_STEPS, 'Installing pub server');
   ui.info(`Directory: ${ui.dim(pubDir)}`);
   ui.spacer();
+
+  const installSpin = ui.spinner('Installing @openpub-ai/pub-server...');
+  try {
+    execSync('npm install', {
+      cwd: pubDir,
+      stdio: 'pipe',
+      timeout: 120000,
+    });
+    installSpin.stop('Dependencies installed');
+  } catch (error) {
+    installSpin.stop();
+    ui.err('Failed to install dependencies. You can install manually:');
+    ui.info(`  cd ${pubDir} && npm install`);
+  }
 
   const startNow = await confirm({
     message: 'Start the pub now?',
@@ -524,26 +498,22 @@ LOG_LEVEL=info
   });
 
   if (startNow) {
-    const buildSpin = ui.spinner('Pulling image and starting container...');
-    try {
-      execSync('docker compose up -d', {
-        cwd: pubDir,
-        stdio: 'pipe',
-        timeout: 120000,
-      });
-      buildSpin.stop('Container started');
-    } catch (error) {
-      buildSpin.stop();
-      ui.err('Failed to start container. You can start it manually:');
-      ui.info(`  cd ${pubDir} && docker compose up -d`);
-    }
+    ui.info('Starting pub server...');
+    ui.spacer();
+    // Start in background using node directly
+    const child = spawn('node', ['node_modules/@openpub-ai/pub-server/dist/server.js'], {
+      cwd: pubDir,
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, PUB_MD_PATH: resolve(pubDir, 'PUB.md') },
+    });
+    child.unref();
 
     // ── Step 10: Verify ──
 
     ui.step(10, TOTAL_STEPS, 'Verifying');
 
-    // Wait a few seconds for startup
-    await sleep(5000);
+    await sleep(3000);
 
     const verifySpin = ui.spinner('Checking health...');
     try {
@@ -553,19 +523,19 @@ LOG_LEVEL=info
       } else {
         verifySpin.stop();
         ui.warn('Pub server responded but may not be fully ready.');
-        ui.info('Check logs: docker compose logs -f');
+        ui.info(`Check logs or run: cd ${pubDir} && npm start`);
       }
     } catch {
       verifySpin.stop();
       ui.warn('Could not reach pub server yet. It may still be starting.');
-      ui.info(`Check logs: cd ${pubDir} && docker compose logs -f`);
+      ui.info(`Start manually: cd ${pubDir} && npm start`);
     }
   } else {
     ui.step(10, TOTAL_STEPS, 'Manual start');
-    ui.info('To start your pub later:');
+    ui.info('To start your pub:');
     ui.spacer();
     ui.info(`  cd ${pubDir}`);
-    ui.info(`  docker compose up -d`);
+    ui.info(`  npm start`);
   }
 
   // ── Done ──
@@ -583,16 +553,16 @@ LOG_LEVEL=info
   ui.info(ui.dim('  Important files:'));
   ui.info(ui.dim("    PUB.md            Your pub's personality and rules"));
   ui.info(ui.dim('    .env              Credentials and config (keep secret)'));
-  ui.info(ui.dim('    docker-compose.yml  Container configuration'));
+  ui.info(ui.dim('    package.json      Dependencies'));
   ui.spacer();
   ui.info(ui.dim('  Commands:'));
   ui.info(ui.dim(`    cd ${pubDir}`));
-  ui.info(ui.dim('    docker compose logs -f    View live logs'));
-  ui.info(ui.dim('    docker compose restart    Restart the pub'));
-  ui.info(ui.dim('    docker compose down       Stop the pub'));
+  ui.info(ui.dim('    npm start                Start the pub'));
+  ui.info(ui.dim('    npm start &              Start in background'));
+  ui.info(ui.dim('    npx pm2 start npm -- start   Run with process manager'));
   ui.spacer();
   ui.info(`  Edit ${ui.brass('PUB.md')} to change your bartender's personality.`);
-  ui.info(`  Then restart: ${ui.dim('docker compose restart')}`);
+  ui.info(`  Then restart: ${ui.dim('npm start')}`);
   ui.spacer();
 }
 

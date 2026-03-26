@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { createHash } from 'crypto';
 import { ClientEvent, ServerEvent, ERROR_CODES, PROTOCOL_VERSION } from '@openpub-ai/types';
 import { config } from 'dotenv';
