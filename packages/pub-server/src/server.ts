@@ -110,7 +110,7 @@ const fragmentGenerator = new MemoryFragmentGenerator({
 
 // Register the bartender as a "house" presence in room state
 // so messages from the environment model have a proper display name
-roomState.addHouseAgent(pubConfig.frontmatter.name);
+roomState.addHouseAgent('Bartender');
 
 // Auto-moderator instance
 const autoModerator = new AutoModerator({
