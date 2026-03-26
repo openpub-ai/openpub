@@ -22,7 +22,9 @@ RUN pnpm --filter @openpub-ai/pub-server deploy --prod /app/deployed
 
 # Copy built types into the deployed bundle (pnpm deploy creates broken
 # symlinks for workspace dependencies even when versioned on npm)
-RUN cp -r /app/packages/types/dist /app/deployed/node_modules/@openpub-ai/types/dist && \
+RUN rm -rf /app/deployed/node_modules/@openpub-ai/types && \
+    mkdir -p /app/deployed/node_modules/@openpub-ai/types && \
+    cp -r /app/packages/types/dist /app/deployed/node_modules/@openpub-ai/types/dist && \
     cp /app/packages/types/package.json /app/deployed/node_modules/@openpub-ai/types/package.json
 
 FROM node:20-alpine AS runner
