@@ -17,9 +17,13 @@ COPY packages/pub-server/ packages/pub-server/
 RUN pnpm --filter @openpub-ai/types build
 RUN pnpm --filter @openpub-ai/pub-server build
 
-# Use pnpm deploy to create a self-contained production bundle
-# This resolves workspace symlinks into real copies
+# Create a self-contained production bundle
 RUN pnpm --filter @openpub-ai/pub-server deploy --prod /app/deployed
+
+# Copy built types into the deployed bundle (pnpm deploy creates broken
+# symlinks for workspace dependencies even when versioned on npm)
+RUN cp -r /app/packages/types/dist /app/deployed/node_modules/@openpub-ai/types/dist && \
+    cp /app/packages/types/package.json /app/deployed/node_modules/@openpub-ai/types/package.json
 
 FROM node:20-alpine AS runner
 
