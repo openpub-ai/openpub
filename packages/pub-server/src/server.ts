@@ -221,9 +221,14 @@ async function triggerBartenderResponse(context: string): Promise<void> {
  * Generate a real memory fragment for an agent on checkout.
  * Uses the LLM adapter + Ed25519 signing.
  */
-async function generateFragment(agentId: string): Promise<ServerEvent> {
-  const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
-  const conversation = roomState.getConversation();
+async function generateFragment(
+  agentId: string,
+  prefetchedPresence?: import('@openpub-ai/types').AgentPresence,
+  prefetchedConversation?: import('@openpub-ai/types').Message[]
+): Promise<ServerEvent> {
+  const presence =
+    prefetchedPresence || roomState.getAllPresence().find((p) => p.agent_id === agentId);
+  const conversation = prefetchedConversation || roomState.getConversation();
 
   if (!presence) {
     // Fallback: agent already left room state somehow
@@ -350,6 +355,7 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: 16384 });
 
 const spectatorWss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
 const spectatorConnections = new Set<WebSocket>();
+const MAX_SPECTATORS = 100;
 
 spectatorWss.on('connection', (ws: WebSocket) => {
   // Only allow spectators for open-visibility pubs
@@ -357,6 +363,16 @@ spectatorWss.on('connection', (ws: WebSocket) => {
     ws.close(4003, 'Spectating not available for this pub');
     return;
   }
+
+  if (spectatorConnections.size >= MAX_SPECTATORS) {
+    ws.close(4000, 'Spectator limit reached');
+    return;
+  }
+
+  (ws as any).isAlive = true;
+  ws.on('pong', () => {
+    (ws as any).isAlive = true;
+  });
 
   spectatorConnections.add(ws);
   fastify.log.info(`Spectator connected (total: ${spectatorConnections.size})`);
@@ -838,6 +854,30 @@ fastify.server.on('upgrade', (req, socket, head) => {
   }
 });
 
+// ─── WebSocket Heartbeats (Ping/Pong) ───
+setInterval(() => {
+  // Check active agents
+  for (const [agentId, ws] of wsConnections.entries()) {
+    if ((ws as any).isAlive === false) {
+      fastify.log.warn(`Terminating dead WebSocket for agent ${agentId}`);
+      ws.terminate(); // Trigger the 'close' event automatically
+      continue;
+    }
+    (ws as any).isAlive = false;
+    ws.ping();
+  }
+
+  // Check spectators
+  for (const ws of spectatorConnections) {
+    if ((ws as any).isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    (ws as any).isAlive = false;
+    ws.ping();
+  }
+}, 30000);
+
 // ─── Graceful Shutdown ───
 
 const gracefulShutdown = async () => {
@@ -1095,32 +1135,39 @@ const start = async () => {
         if (!relayedAgents.has(agentId)) return;
 
         // Auto-checkout: generate fragment if agent didn't explicitly check out
-        const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
-        if (presence) {
-          const messageCount = presence.message_count;
-          const sessionId = relayedAgents.get(agentId) || '';
-          fastify.log.info(
-            `Relayed agent ${agentId} disconnected without checkout, auto-checking out`
-          );
-          try {
-            const fragmentEvent = await generateFragment(agentId);
-            const fragmentData = (fragmentEvent as any).data;
-            notifyHubCheckout(
-              sessionId,
-              sessionId,
-              messageCount,
-              fragmentData?.fragment_id,
-              fragmentData
-            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
-          } catch (err) {
-            fastify.log.error(`Auto-checkout fragment error for ${agentId}: ${err}`);
-          }
-        }
+        const presence = roomState.getAllPresence().find((p) => p.agent_id === agentId);
+        const conversationSnapshot = roomState.getConversation();
+        const sessionId = relayedAgents.get(agentId) || '';
 
+        // Synchronously free up the slot so race conditions are prevented
         roomState.removeAgent(agentId);
         relayedAgents.delete(agentId);
         broadcastRoomState();
         fastify.log.info(`Relayed agent ${agentId} disconnected`);
+
+        if (presence) {
+          const messageCount = presence.message_count;
+          fastify.log.info(
+            `Relayed agent ${agentId} disconnected without checkout, auto-checking out`
+          );
+          try {
+            let fragmentId: string | undefined;
+            let fragmentData: any;
+
+            // Only query the LLM if they spoke
+            if (messageCount > 0) {
+              const fragmentEvent = await generateFragment(agentId, presence, conversationSnapshot);
+              fragmentData = (fragmentEvent as any).data;
+              fragmentId = fragmentData?.fragment_id;
+            }
+
+            notifyHubCheckout(sessionId, sessionId, messageCount, fragmentId, fragmentData).catch(
+              (err) => fastify.log.error(`Hub checkout notify error: ${err}`)
+            );
+          } catch (err) {
+            fastify.log.error(`Auto-checkout fragment error for ${agentId}: ${err}`);
+          }
+        }
       },
 
       onAgentRecall: async (agentId: string, visitId: string, reason: string) => {
