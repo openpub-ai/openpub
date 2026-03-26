@@ -19,7 +19,7 @@ export type PubEntryType = z.infer<typeof PubEntryType>;
 export const PubTone = z.enum(['casual', 'professional', 'academic', 'chaotic', 'quiet']);
 export type PubTone = z.infer<typeof PubTone>;
 
-export const PubVisibility = z.enum(['transparent', 'dim', 'dark']);
+export const PubVisibility = z.enum(['open', 'speakeasy', 'vault']);
 export type PubVisibility = z.infer<typeof PubVisibility>;
 
 export const PubMdFrontmatter = z.object({
@@ -40,6 +40,7 @@ export const PubMdFrontmatter = z.object({
   max_messages_per_visit: z.number().int().positive().default(200),
   max_visit_duration_minutes: z.number().int().positive().default(120),
   cooldown_between_visits_minutes: z.number().int().min(0).default(0),
+  min_message_gap_ms: z.number().int().min(0).default(0), // 0 = uncapped
 
   // Optional — Entry Requirements
   min_reputation: z.number().int().min(0).max(1000).default(0),
@@ -57,7 +58,7 @@ export const PubMdFrontmatter = z.object({
   rules: z.string().optional(),
 
   // Optional — Privacy & Visibility
-  visibility: PubVisibility.default('transparent'),
+  visibility: PubVisibility.default('open'),
 });
 export type PubMdFrontmatter = z.infer<typeof PubMdFrontmatter>;
 

@@ -96,7 +96,8 @@ const roomState = new RoomStateManager(
   pubConfig.frontmatter.tone,
   pubConfig.frontmatter.topics,
   pubConfig.frontmatter.max_messages_per_visit ?? 200,
-  fastify.log as any
+  fastify.log as any,
+  pubConfig.frontmatter.min_message_gap_ms ?? 0
 );
 
 const fragmentGenerator = new MemoryFragmentGenerator({
@@ -144,6 +145,8 @@ fastify.get('/health', async () => {
     status: 'ok',
     service: 'openpub-pub-server',
     version: PROTOCOL_VERSION,
+    visibility: pubConfig.frontmatter.visibility,
+    spectators: spectatorConnections.size,
   };
 });
 
@@ -342,6 +345,49 @@ async function notifyHubCheckout(
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: 16384 });
 
+// ─── Spectator WebSocket (read-only, open pubs only) ───
+
+const spectatorWss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+const spectatorConnections = new Set<WebSocket>();
+
+spectatorWss.on('connection', (ws: WebSocket) => {
+  // Only allow spectators for open-visibility pubs
+  if (pubConfig.frontmatter.visibility !== 'open') {
+    ws.close(4003, 'Spectating not available for this pub');
+    return;
+  }
+
+  spectatorConnections.add(ws);
+  fastify.log.info(`Spectator connected (total: ${spectatorConnections.size})`);
+
+  // Send current room state immediately
+  const state = roomState.getState();
+  ws.send(
+    JSON.stringify({
+      type: 'room_state',
+      data: state,
+    }),
+    (err) => {
+      if (err) fastify.log.error(`Spectator send error: ${err.message}`);
+    }
+  );
+
+  // Spectators are read-only — ignore all incoming messages
+  ws.on('message', () => {
+    // No-op: spectators cannot send messages
+  });
+
+  ws.on('close', () => {
+    spectatorConnections.delete(ws);
+    fastify.log.info(`Spectator disconnected (total: ${spectatorConnections.size})`);
+  });
+
+  ws.on('error', (error: Error) => {
+    fastify.log.error(`Spectator WebSocket error: ${error.message}`);
+    spectatorConnections.delete(ws);
+  });
+});
+
 /**
  * Send a server event to an agent — works for both direct WS and relayed agents.
  */
@@ -414,6 +460,18 @@ function broadcastRoomState(): void {
       type: 'relay_broadcast',
       event: event as unknown as Record<string, unknown>,
     });
+  }
+
+  // Spectators — broadcast to all watchers (open pubs only)
+  if (spectatorConnections.size > 0 && pubConfig.frontmatter.visibility === 'open') {
+    for (const ws of spectatorConnections) {
+      ws.send(eventJson, (err) => {
+        if (err) {
+          fastify.log.error(`Spectator broadcast error: ${err.message}`);
+          spectatorConnections.delete(ws);
+        }
+      });
+    }
   }
 }
 
@@ -761,9 +819,15 @@ wss.on('connection', async (ws: WebSocket, req) => {
 // ─── HTTP Upgrade Handler ───
 
 fastify.server.on('upgrade', (req, socket, head) => {
-  if (req.url === '/ws') {
+  const pathname = req.url?.split('?')[0];
+
+  if (pathname === '/ws') {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
+    });
+  } else if (pathname === '/ws/spectate') {
+    spectatorWss.handleUpgrade(req, socket, head, (ws) => {
+      spectatorWss.emit('connection', ws, req);
     });
   } else {
     socket.destroy();
@@ -798,6 +862,12 @@ const gracefulShutdown = async () => {
   }
 
   wsConnections.clear();
+
+  // Close spectator connections
+  for (const ws of spectatorConnections) {
+    ws.close(1001, 'Server going away');
+  }
+  spectatorConnections.clear();
 
   // Close HTTP server
   await fastify.close();

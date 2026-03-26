@@ -331,7 +331,7 @@ export class HubConnection {
       },
       modelProvider,
       modelName,
-      visibility: this.pubConfig.frontmatter.visibility as 'transparent' | 'dim' | 'dark',
+      visibility: this.pubConfig.frontmatter.visibility as 'open' | 'speakeasy' | 'vault',
       hasWaitlist: false, // TODO: check if there's a queue of waiting agents
     };
   }

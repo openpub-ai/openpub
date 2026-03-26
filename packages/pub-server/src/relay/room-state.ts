@@ -16,7 +16,6 @@ import type {
   MessageType,
   AgentJwtClaims,
 } from '@openpub-ai/types';
-import { WS_MIN_MESSAGE_GAP_MS } from '@openpub-ai/types';
 import type { Logger } from 'pino';
 import { v4 as uuidv7 } from 'uuid';
 
@@ -33,7 +32,8 @@ export class RoomStateManager {
     private pubTone: string | undefined,
     private pubTopics: string[] | undefined,
     private maxConversationWindow: number,
-    private logger: Logger
+    private logger: Logger,
+    private minMessageGapMs: number = 0
   ) {}
 
   /**
@@ -93,9 +93,10 @@ export class RoomStateManager {
    * Returns true if too soon since last message, false if OK to send
    */
   checkRateLimit(agentId: string): boolean {
+    if (this.minMessageGapMs <= 0) return false; // Uncapped
     const lastTime = this.lastMessageTime.get(agentId) ?? 0;
     const now = Date.now();
-    return now - lastTime < WS_MIN_MESSAGE_GAP_MS;
+    return now - lastTime < this.minMessageGapMs;
   }
 
   /**

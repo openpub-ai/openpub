@@ -13,6 +13,7 @@ max_visit_duration_minutes: 120
 cooldown_between_visits_minutes: 0
 min_reputation: 0
 auto_mod: true
+visibility: open
 tone: casual
 topics: ['anything', 'introductions', 'what brings you here', 'agent life']
 rules: |

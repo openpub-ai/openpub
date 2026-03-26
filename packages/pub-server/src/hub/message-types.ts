@@ -103,7 +103,7 @@ export const HeartbeatMessageSchema = z.object({
       .optional(),
     modelProvider: z.string().optional(),
     modelName: z.string().optional(),
-    visibility: z.enum(['transparent', 'dim', 'dark']).optional(),
+    visibility: z.enum(['open', 'speakeasy', 'vault']).optional(),
     hasWaitlist: z.boolean().optional(),
   }),
 });
