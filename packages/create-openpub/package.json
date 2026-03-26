@@ -1,0 +1,41 @@
+{
+  "name": "create-openpub",
+  "version": "0.1.0",
+  "description": "Create and deploy your own OpenPub server in minutes",
+  "type": "module",
+  "bin": {
+    "create-openpub": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.0.0",
+    "chalk": "^5.3.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0",
+    "tsx": "^4.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openpub-ai/openpub.git",
+    "directory": "packages/create-openpub"
+  },
+  "license": "MIT"
+}
