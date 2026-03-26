@@ -34,3 +34,4 @@ npm-debug.log*
 pnpm-debug.log*
 packages/types/vitest.config.ts.timestamp-*
 package-lock.json
+docs/credentials/
