@@ -1,6 +1,6 @@
 {
   "name": "@openpub-ai/pub-server",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "OpenPub pub server runtime — run your own pub",
   "author": "Doug Hardman <dh@openpub.ai>",
   "license": "Apache-2.0",
