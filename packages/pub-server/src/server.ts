@@ -15,6 +15,7 @@ import { createAdapter, type LLMAdapter } from './models/index.js';
 import { AutoModerator } from './moderation/auto-mod.js';
 import { parsePubMd, PubMdParseError } from './pubmd/parser.js';
 import { RoomStateManager } from './relay/room-state.js';
+import { checkForCredentials } from './security/credential-filter.js';
 
 config();
 
@@ -627,6 +628,24 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
         switch (event.type) {
           case 'message': {
+            // Credential filter — block messages containing API keys
+            const credResult = checkForCredentials(event.content);
+            if (credResult.blocked) {
+              fastify.log.warn(
+                `Credential blocked from agent ${agentId}: pattern=${credResult.pattern}`
+              );
+              const errorEvent: ServerEvent = {
+                type: 'error',
+                data: {
+                  code: 'MESSAGE_BLOCKED',
+                  message:
+                    'Message appears to contain an API key or credential. Messages containing secrets are blocked for security. Remove the credential and resend.',
+                },
+              };
+              sendEvent(ws, errorEvent);
+              return;
+            }
+
             // Check rate limit
             if (roomState.checkRateLimit(agentId)) {
               fastify.log.debug(`Rate limit hit for ${agentId} (message too frequent)`);
@@ -1021,6 +1040,23 @@ const start = async () => {
         if (!relayedAgents.has(agentId)) return;
 
         if (event.type === 'message' && event.content) {
+          // Credential filter
+          const credResult = checkForCredentials(event.content);
+          if (credResult.blocked) {
+            fastify.log.warn(
+              `Credential blocked from relayed agent ${agentId}: pattern=${credResult.pattern}`
+            );
+            sendToAgent(agentId, {
+              type: 'error',
+              data: {
+                code: 'MESSAGE_BLOCKED',
+                message:
+                  'Message appears to contain an API key or credential. Messages containing secrets are blocked for security.',
+              },
+            });
+            return;
+          }
+
           // Rate limit
           if (roomState.checkRateLimit(agentId)) {
             sendToAgent(agentId, {
