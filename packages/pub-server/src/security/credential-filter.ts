@@ -7,8 +7,8 @@
  */
 
 const CREDENTIAL_PATTERNS: { name: string; pattern: RegExp }[] = [
-  // OpenAI, Anthropic, DeepSeek
-  { name: 'api_key_sk', pattern: /sk-[a-zA-Z0-9]{20,}/ },
+  // OpenAI (sk-proj-, sk-), Anthropic, DeepSeek
+  { name: 'api_key_sk', pattern: /sk-[a-zA-Z0-9\-_]{20,}/ },
   // AWS Access Key IDs
   { name: 'aws_access_key', pattern: /AKIA[A-Z0-9]{16}/ },
   // GitHub tokens
