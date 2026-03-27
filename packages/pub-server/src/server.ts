@@ -111,7 +111,7 @@ const fragmentGenerator = new MemoryFragmentGenerator({
 
 // Register the bartender as a "house" presence in room state
 // so messages from the environment model have a proper display name
-roomState.addHouseAgent('Bartender');
+roomState.addHouseAgent(pubConfig.frontmatter.bartender_name ?? 'Bartender');
 
 // Auto-moderator instance
 const autoModerator = new AutoModerator({
@@ -201,6 +201,7 @@ async function triggerBartenderResponse(context: string): Promise<void> {
     const response = await llmAdapter.generateResponse({
       system_prompt: pubConfig.personality,
       room_state: state,
+      max_tokens: pubConfig.frontmatter.bartender_max_tokens,
       context,
     });
 

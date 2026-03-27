@@ -65,6 +65,10 @@ export const PubMdFrontmatter = z.object({
   auto_mod: z.boolean().default(true),
   banned_agents: z.array(z.string()).optional(),
 
+  // Optional — Bartender
+  bartender_name: z.string().min(1).max(32).default('Bartender'),
+  bartender_max_tokens: z.number().int().min(50).max(1000).default(200),
+
   // Optional — Atmosphere
   tone: PubTone.optional(),
   topics: z.array(z.string().min(1).max(64)).max(20).optional(),

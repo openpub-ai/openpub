@@ -15,6 +15,7 @@ export interface LLMAdapter {
     system_prompt: string;
     room_state: RoomState;
     context: string;
+    max_tokens?: number;
   }): Promise<string>;
 
   /**

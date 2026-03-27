@@ -35,6 +35,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     system_prompt: string;
     room_state: RoomState;
     context: string;
+    max_tokens?: number;
   }): Promise<string> {
     const messages = this.buildMessagesFromRoomState(
       params.system_prompt,
@@ -44,7 +45,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
 
     return this.callChatCompletions(messages, {
       temperature: 0.7,
-      max_tokens: 300,
+      max_tokens: params.max_tokens ?? 200,
     });
   }
 
