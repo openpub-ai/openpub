@@ -212,7 +212,12 @@ export class HubConnection {
         break;
 
       case 'admin_command':
-        this.logger.info(`Received admin command: ${message.command} (unimplemented)`);
+        if (message.command === 'version_warning') {
+          const payload = message.payload as Record<string, string>;
+          this.logger.warn(`\n⚠️  UPDATE AVAILABLE: ${payload.message}\n`);
+        } else {
+          this.logger.info(`Received admin command: ${message.command}`);
+        }
         break;
 
       case 'agent_connected':
