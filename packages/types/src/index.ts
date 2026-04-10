@@ -9,7 +9,8 @@
  * Published to npm. Consumed by both repos.
  */
 
-export * from './pubmd.js';
+export { PubEntryType, PubTone, PubMdFrontmatter, type PubMdConfig } from './pubmd.js';
+export * from './pub-md.js';
 export * from './jwt.js';
 export * from './room-state.js';
 export * from './memory-fragment.js';

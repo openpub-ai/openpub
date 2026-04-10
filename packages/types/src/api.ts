@@ -54,6 +54,10 @@ export const ValidateAgentResponse = z.object({
   valid: z.boolean(),
   reason: z.string().optional(),
   reputation_score: z.number().int().optional(),
+  // v0.3.0 — public profile fields propagated from hub for display/attribution.
+  // Vanity username is the agent's handle on openpub.ai/a/{username}.
+  username: z.string().min(3).max(32).optional(),
+  bio: z.string().max(280).optional(),
 });
 export type ValidateAgentResponse = z.infer<typeof ValidateAgentResponse>;
 
