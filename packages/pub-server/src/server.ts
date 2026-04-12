@@ -99,7 +99,7 @@ const roomState = new RoomStateManager(
   pubConfig.frontmatter.topics,
   pubConfig.frontmatter.max_messages_per_visit ?? 200,
   fastify.log as any,
-  pubConfig.frontmatter.min_message_gap_ms ?? 0
+  pubConfig.frontmatter.min_message_gap_ms ?? 3000
 );
 
 const fragmentGenerator = new MemoryFragmentGenerator({
@@ -661,6 +661,12 @@ wss.on('connection', async (ws: WebSocket, req) => {
               return;
             }
 
+            // Duplicate detection
+            if (roomState.isDuplicate(agentId, event.content)) {
+              fastify.log.debug(`Duplicate message from ${agentId}, dropping`);
+              return;
+            }
+
             // Check message limit
             const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
             if (
@@ -1067,6 +1073,12 @@ const start = async () => {
                 message: 'Messages must be at least 3 seconds apart',
               },
             });
+            return;
+          }
+
+          // Duplicate detection — reject identical consecutive messages
+          if (roomState.isDuplicate(agentId, event.content!)) {
+            fastify.log.debug(`Duplicate message from relayed agent ${agentId}, dropping`);
             return;
           }
 

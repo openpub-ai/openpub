@@ -23,6 +23,7 @@ export class RoomStateManager {
   private agentsPresent = new Map<string, AgentPresence>();
   private conversation: Message[] = [];
   private lastMessageTime = new Map<string, number>(); // agentId -> timestamp
+  private lastMessageContent = new Map<string, string>(); // agentId -> last content (dedup)
   private activeTopics = new Set<string>();
   private messageCounts = new Map<string, number>(); // agentId -> count this visit
 
@@ -33,7 +34,7 @@ export class RoomStateManager {
     private pubTopics: string[] | undefined,
     private maxConversationWindow: number,
     private logger: Logger,
-    private minMessageGapMs: number = 0
+    private minMessageGapMs: number = 3000
   ) {}
 
   /**
@@ -84,19 +85,45 @@ export class RoomStateManager {
       this.agentsPresent.delete(agentId);
       this.messageCounts.delete(agentId);
       this.lastMessageTime.delete(agentId);
+      this.lastMessageContent.delete(agentId);
       this.logger.info(`Agent ${agentId} (${agent.display_name}) left room`);
     }
   }
 
   /**
-   * Check if an agent is rate-limited
-   * Returns true if too soon since last message, false if OK to send
+   * Check if an agent is rate-limited.
+   * Returns true if too soon since last message, false if OK to send.
+   *
+   * IMPORTANT: On pass (returns false), this eagerly stamps the time so that
+   * concurrent async pipelines (e.g. automod) can't race past the same window.
+   * The caller does NOT need to call anything else after a pass — the slot is consumed.
    */
   checkRateLimit(agentId: string): boolean {
     if (this.minMessageGapMs <= 0) return false; // Uncapped
     const lastTime = this.lastMessageTime.get(agentId) ?? 0;
     const now = Date.now();
-    return now - lastTime < this.minMessageGapMs;
+    if (now - lastTime < this.minMessageGapMs) return true; // Too soon
+    // Eagerly consume the slot to prevent async races
+    this.lastMessageTime.set(agentId, now);
+    return false;
+  }
+
+  /**
+   * Check if a message is a duplicate of the agent's last message.
+   * Returns true if the content is identical to the last accepted message
+   * from this agent (regardless of timing). Prevents echo loops.
+   */
+  isDuplicate(agentId: string, content: string): boolean {
+    const last = this.lastMessageContent.get(agentId);
+    return last === content;
+  }
+
+  /**
+   * Record accepted message content for dedup tracking.
+   * Called after a message passes all checks and is about to be added.
+   */
+  recordMessageContent(agentId: string, content: string): void {
+    this.lastMessageContent.set(agentId, content);
   }
 
   /**
@@ -128,8 +155,10 @@ export class RoomStateManager {
       this.messageCounts.set(agentId, presence.message_count);
     }
 
-    // Update last message time
+    // Note: lastMessageTime is set eagerly in checkRateLimit() to prevent async races.
+    // We still update here for the bartender's messages (which bypass rate limiting).
     this.lastMessageTime.set(agentId, Date.now());
+    this.lastMessageContent.set(agentId, content);
 
     // Track topics (very basic: split content into potential topics)
     // In a real system, this would be more sophisticated
