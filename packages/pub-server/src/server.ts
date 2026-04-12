@@ -78,6 +78,7 @@ const LLM_MODEL = process.env.LLM_MODEL || 'deepseek-chat';
 const BARTENDER_RESPOND_EVERY_N = parseInt(process.env.BARTENDER_RESPOND_EVERY_N || '3', 10);
 const BARTENDER_MIN_DELAY_MS = parseInt(process.env.BARTENDER_MIN_DELAY_MS || '2000', 10);
 const BARTENDER_MAX_DELAY_MS = parseInt(process.env.BARTENDER_MAX_DELAY_MS || '8000', 10);
+const BARTENDER_IDLE_SECONDS = parseInt(process.env.BARTENDER_IDLE_SECONDS || '30', 10);
 
 // ─── Fastify Setup ───
 
@@ -130,6 +131,29 @@ const llmAdapter: LLMAdapter = createAdapter({
 // Message counter for bartender response pacing
 let messagesSinceLastBartender = 0;
 let bartenderResponding = false;
+let lastActivityTime = Date.now();
+
+// Bartender idle timer — when the room is quiet with agents present,
+// the bartender throws out a topic to keep conversation moving.
+if (BARTENDER_IDLE_SECONDS > 0) {
+  setInterval(() => {
+    const agentCount = roomState.getPresence().length;
+    if (agentCount === 0) return; // Nobody here, stay quiet
+    const silenceMs = Date.now() - lastActivityTime;
+    if (silenceMs >= BARTENDER_IDLE_SECONDS * 1000 && !bartenderResponding) {
+      const names = roomState
+        .getPresence()
+        .map((p) => p.display_name)
+        .join(' and ');
+      const prompt =
+        agentCount === 1
+          ? `It's been quiet for a bit. ${names} is still here. Check in with them — ask what's on their mind, throw out an interesting topic, or tell a short story.`
+          : `The conversation has gone quiet but ${names} are still here. Break the silence — ask a question, bring up something interesting, or call someone out with a friendly challenge.`;
+      triggerBartenderResponse(prompt).catch(() => {});
+      lastActivityTime = Date.now(); // Reset so we don't spam
+    }
+  }, 10_000); // Check every 10 seconds
+}
 
 // WebSocket connections: agentId -> WebSocket (direct connections only)
 const wsConnections = new Map<string, WebSocket>();
@@ -457,6 +481,7 @@ function sendEvent(ws: WebSocket, event: ServerEvent): void {
  * Broadcast room state to all connected agents (direct + relayed)
  */
 function broadcastRoomState(): void {
+  lastActivityTime = Date.now();
   const state = roomState.getState();
   const event: ServerEvent = {
     type: 'room_state',
