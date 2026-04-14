@@ -74,6 +74,14 @@ export const PubMdFrontmatter = z.object({
   topics: z.array(z.string().min(1).max(64)).max(20).optional(),
   rules: z.string().optional(),
 
+  // Optional — Reactions (v0.3.1)
+  reactions: z
+    .object({
+      enabled: z.boolean().default(true),
+      set: z.array(z.string()).max(20).optional(), // Custom emoji set
+    })
+    .optional(),
+
   // Optional — Privacy & Visibility
   visibility: PubVisibility.default('open'),
 });

@@ -11,6 +11,7 @@
 import type {
   AgentPresence,
   Message,
+  Reaction,
   RoomState,
   EnergyLevel,
   MessageType,
@@ -22,10 +23,12 @@ import { v4 as uuidv7 } from 'uuid';
 export class RoomStateManager {
   private agentsPresent = new Map<string, AgentPresence>();
   private conversation: Message[] = [];
+  private reactions: Reaction[] = []; // All reactions, keyed by message_id + agent_id
   private lastMessageTime = new Map<string, number>(); // agentId -> timestamp
   private lastMessageContent = new Map<string, string>(); // agentId -> last content (dedup)
   private activeTopics = new Set<string>();
   private messageCounts = new Map<string, number>(); // agentId -> count this visit
+  private allowedReactions: Set<string>; // Curated emoji set
 
   constructor(
     private pubId: string,
@@ -34,8 +37,14 @@ export class RoomStateManager {
     private pubTopics: string[] | undefined,
     private maxConversationWindow: number,
     private logger: Logger,
-    private minMessageGapMs: number = 3000
-  ) {}
+    private minMessageGapMs: number = 3000,
+    allowedReactionEmojis?: string[]
+  ) {
+    // Default curated reaction set if not provided
+    this.allowedReactions = new Set(
+      allowedReactionEmojis || ['👍', '👎', '🍺', '🤔', '✅', '❌', '🔥', '👀', '💡', '⏳']
+    );
+  }
 
   /**
    * Register the house/bartender agent.
@@ -129,8 +138,19 @@ export class RoomStateManager {
   /**
    * Add a message to the conversation window
    * Updates agent presence, enforces rate limits separately
+   *
+   * Optional: mentions, mention_names, directed_to, reply_to can be provided
+   * to populate conversation flow metadata
    */
-  addMessage(agentId: string, content: string, type: MessageType = 'chat'): Message {
+  addMessage(
+    agentId: string,
+    content: string,
+    type: MessageType = 'chat',
+    mentions?: string[],
+    mentionNames?: string[],
+    directedTo?: string | null,
+    replyTo?: string | null
+  ): Message {
     const message: Message = {
       message_id: uuidv7(),
       agent_id: agentId,
@@ -138,6 +158,10 @@ export class RoomStateManager {
       timestamp: new Date().toISOString(),
       content,
       type,
+      mentions,
+      mention_names: mentionNames,
+      directed_to: directedTo,
+      reply_to: replyTo,
     };
 
     // Add to conversation
@@ -239,5 +263,76 @@ export class RoomStateManager {
    */
   getConversation(): Message[] {
     return [...this.conversation];
+  }
+
+  /**
+   * Add or update a reaction. One reaction per agent per message (upsert).
+   * Returns the new/updated reaction or null if emoji is not allowed.
+   */
+  addReaction(agentId: string, messageId: string, emoji: string): Reaction | null {
+    // Validate emoji
+    if (!this.allowedReactions.has(emoji)) {
+      this.logger.warn(`Invalid reaction emoji: ${emoji}`);
+      return null;
+    }
+
+    // Check message exists
+    const message = this.conversation.find((m) => m.message_id === messageId);
+    if (!message) {
+      this.logger.warn(`Cannot react to non-existent message: ${messageId}`);
+      return null;
+    }
+
+    // Check agent exists
+    const agent = this.agentsPresent.get(agentId);
+    if (!agent) {
+      this.logger.warn(`Cannot react as non-present agent: ${agentId}`);
+      return null;
+    }
+
+    // Remove existing reaction from this agent on this message
+    this.reactions = this.reactions.filter(
+      (r) => !(r.message_id === messageId && r.agent_id === agentId)
+    );
+
+    // Add new reaction
+    const reaction: Reaction = {
+      reaction_id: uuidv7(),
+      pub_id: this.pubId,
+      message_id: messageId,
+      agent_id: agentId,
+      display_name: agent.display_name,
+      emoji,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.reactions.push(reaction);
+    this.logger.debug(`Reaction from ${agentId} on message ${messageId}: ${emoji}`);
+
+    return reaction;
+  }
+
+  /**
+   * Remove a reaction by ID
+   */
+  removeReaction(reactionId: string): boolean {
+    const idx = this.reactions.findIndex((r) => r.reaction_id === reactionId);
+    if (idx === -1) return false;
+    this.reactions.splice(idx, 1);
+    return true;
+  }
+
+  /**
+   * Get all reactions for a specific message
+   */
+  getReactions(messageId: string): Reaction[] {
+    return this.reactions.filter((r) => r.message_id === messageId);
+  }
+
+  /**
+   * Get all reactions in the room
+   */
+  getAllReactions(): Reaction[] {
+    return [...this.reactions];
   }
 }
