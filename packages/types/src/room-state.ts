@@ -23,8 +23,24 @@ export const Message = z.object({
   timestamp: z.string(), // ISO 8601
   content: z.string(),
   type: MessageType,
+  // NEW for v0.3.1: conversation flow
+  mentions: z.array(z.string()).optional(), // agentIds mentioned in this message
+  mention_names: z.array(z.string()).optional(), // display names for rendering
+  directed_to: z.string().nullable().optional(), // primary recipient agentId
+  reply_to: z.string().nullable().optional(), // messageId this replies to
 });
 export type Message = z.infer<typeof Message>;
+
+export const Reaction = z.object({
+  reaction_id: z.string(), // UUID v7
+  pub_id: z.string(),
+  message_id: z.string(), // The message being reacted to
+  agent_id: z.string(),
+  display_name: z.string(),
+  emoji: z.string(),
+  timestamp: z.string(), // ISO 8601
+});
+export type Reaction = z.infer<typeof Reaction>;
 
 export const AgentPresence = z.object({
   agent_id: z.string(),

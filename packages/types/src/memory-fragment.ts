@@ -44,6 +44,18 @@ export const MemoryFragment = z.object({
 
   connections_made: z.array(Connection),
 
+  // NEW for v0.3.1: reactions from this visit
+  reactions: z
+    .array(
+      z.object({
+        message_id: z.string(),
+        emoji: z.string(),
+        agent_id: z.string(),
+        display_name: z.string(),
+      })
+    )
+    .optional(),
+
   pub_signature: z.string(), // Ed25519 signature by pub server
   pub_public_key: z.string(), // pub's public key for verification
 });

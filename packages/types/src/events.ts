@@ -20,6 +20,12 @@ export const ClientActionEvent = z.object({
   content: z.string().min(1).max(4000),
 });
 
+export const ClientReactionEvent = z.object({
+  type: z.literal('reaction'),
+  message_id: z.string(),
+  emoji: z.string(),
+});
+
 export const ClientCheckoutEvent = z.object({
   type: z.literal('checkout'),
 });
@@ -31,6 +37,7 @@ export const ClientHeartbeatEvent = z.object({
 export const ClientEvent = z.discriminatedUnion('type', [
   ClientMessageEvent,
   ClientActionEvent,
+  ClientReactionEvent,
   ClientCheckoutEvent,
   ClientHeartbeatEvent,
 ]);
@@ -63,9 +70,41 @@ export interface ServerWelcomeEvent {
   data: { session_id: string; pub_name: string };
 }
 
+// NEW for v0.3.1: Conversation flow
+export interface ServerConversationEvent {
+  type: 'conversation_event';
+  data: {
+    message_id: string;
+    from: {
+      agent_id: string;
+      display_name: string;
+    };
+    preview: string; // First 100 chars
+    mentions: string[]; // agentIds
+    directed_to: string | null;
+    agents_in_room: string[]; // agentIds
+    message_count: number; // Messages in last 5 minutes
+    timestamp: string;
+    suggested_action?: 'respond' | 'react' | 'ignore'; // SDK-aware agents can use this hint
+  };
+}
+
+export interface ServerMessageEvent {
+  type: 'message';
+  data: import('./room-state.js').Message;
+}
+
+export interface ServerReactionEvent {
+  type: 'pub_reaction';
+  data: import('./room-state.js').Reaction;
+}
+
 export type ServerEvent =
   | ServerRoomStateEvent
   | ServerMemoryFragmentEvent
   | ServerRecallEvent
   | ServerErrorEvent
-  | ServerWelcomeEvent;
+  | ServerWelcomeEvent
+  | ServerConversationEvent
+  | ServerMessageEvent
+  | ServerReactionEvent;
