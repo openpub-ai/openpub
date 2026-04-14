@@ -13,7 +13,15 @@ export { PubEntryType, PubTone, PubMdFrontmatter, type PubMdConfig } from './pub
 export * from './pub-md.js';
 export * from './jwt.js';
 export * from './room-state.js';
-export { Message, Reaction, MessageType, AgentStatus, EnergyLevel, AgentPresence, RoomState } from './room-state.js';
+export {
+  Message,
+  Reaction,
+  MessageType,
+  AgentStatus,
+  EnergyLevel,
+  AgentPresence,
+  RoomState,
+} from './room-state.js';
 export * from './memory-fragment.js';
 export * from './api.js';
 export * from './events.js';

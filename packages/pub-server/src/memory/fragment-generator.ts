@@ -11,7 +11,7 @@
 
 import { createHash } from 'crypto';
 import * as ed25519 from '@noble/ed25519';
-import type { Message, AgentPresence, MemoryFragment } from '@openpub-ai/types';
+import type { Message, AgentPresence, Reaction, MemoryFragment } from '@openpub-ai/types';
 import { v4 as uuidv7 } from 'uuid';
 import type { LLMAdapter } from '../models/adapter';
 
@@ -49,6 +49,7 @@ export class MemoryFragmentGenerator {
     conversation: Message[];
     agent: AgentPresence;
     visitStartTime: string;
+    reactions?: Reaction[];
   }): Promise<MemoryFragment> {
     // Generate the fragment using the LLM
     const baseFragment = await params.adapter.generateMemoryFragment({
@@ -72,6 +73,12 @@ export class MemoryFragmentGenerator {
       topics_discussed: baseFragment.topics_discussed,
       notable_moments: baseFragment.notable_moments,
       connections_made: baseFragment.connections_made,
+      reactions: params.reactions?.map((r) => ({
+        message_id: r.message_id,
+        emoji: r.emoji,
+        agent_id: r.agent_id,
+        display_name: r.display_name,
+      })),
       pub_signature: '', // Will be populated after signing
       pub_public_key: this.signingKeyPublic,
     };

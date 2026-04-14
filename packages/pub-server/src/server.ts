@@ -14,6 +14,7 @@ import { MemoryFragmentGenerator } from './memory/fragment-generator.js';
 import { createAdapter, type LLMAdapter } from './models/index.js';
 import { AutoModerator } from './moderation/auto-mod.js';
 import { parsePubMd, PubMdParseError } from './pubmd/parser.js';
+import { parseMentions } from './relay/mentions.js';
 import { RoomStateManager } from './relay/room-state.js';
 import { checkForCredentials } from './security/credential-filter.js';
 
@@ -100,7 +101,8 @@ const roomState = new RoomStateManager(
   pubConfig.frontmatter.topics,
   pubConfig.frontmatter.max_messages_per_visit ?? 200,
   fastify.log as any,
-  pubConfig.frontmatter.min_message_gap_ms ?? 3000
+  pubConfig.frontmatter.min_message_gap_ms ?? 3000,
+  pubConfig.frontmatter.reactions?.set
 );
 
 const fragmentGenerator = new MemoryFragmentGenerator({
@@ -280,12 +282,18 @@ async function generateFragment(
   }
 
   try {
+    // Filter reactions relevant to this visit
+    const visitReactions = roomState
+      .getAllReactions()
+      .filter((r) => conversation.some((m) => m.message_id === r.message_id));
+
     const fragment = await fragmentGenerator.generate({
       adapter: llmAdapter,
       systemPrompt: pubConfig.personality,
       conversation,
       agent: presence,
       visitStartTime: presence.joined_at,
+      reactions: visitReactions,
     });
 
     return {
@@ -737,8 +745,23 @@ wss.on('connection', async (ws: WebSocket, req) => {
               return;
             }
 
+            // Parse mentions from content
+            const mentionResult = parseMentions(event.content, roomState.getPresence());
+            // Filter out self-mentions
+            const filteredMentions = mentionResult.mentions.filter((id) => id !== agentId);
+            const directedTo =
+              mentionResult.directedTo === agentId ? null : mentionResult.directedTo;
+
             // Add message and broadcast
-            roomState.addMessage(agentId, event.content, 'chat');
+            roomState.addMessage(
+              agentId,
+              event.content,
+              'chat',
+              filteredMentions,
+              mentionResult.mentionNames,
+              directedTo,
+              null
+            );
             broadcastRoomState();
 
             fastify.log.debug(`Message from ${agentId}: ${event.content.substring(0, 50)}...`);
@@ -808,6 +831,60 @@ wss.on('connection', async (ws: WebSocket, req) => {
             });
 
             ws.close(1000, 'checkout');
+            break;
+          }
+
+          case 'reaction': {
+            // Handle reaction
+            if (!pubConfig.frontmatter.reactions?.enabled) {
+              const errorEvent: ServerEvent = {
+                type: 'error',
+                data: {
+                  code: 'REACTIONS_DISABLED',
+                  message: 'Reactions are not enabled in this pub',
+                },
+              };
+              sendEvent(ws, errorEvent);
+              return;
+            }
+
+            const reaction = roomState.addReaction(agentId, event.message_id, event.emoji);
+            if (!reaction) {
+              const errorEvent: ServerEvent = {
+                type: 'error',
+                data: {
+                  code: 'INVALID_REACTION',
+                  message: 'Invalid reaction emoji or message',
+                },
+              };
+              sendEvent(ws, errorEvent);
+              return;
+            }
+
+            // Broadcast reaction
+            const reactionEvent: ServerEvent = {
+              type: 'pub_reaction',
+              data: reaction,
+            };
+
+            // Broadcast to all agents
+            for (const otherWs of wsConnections.values()) {
+              otherWs.send(JSON.stringify(reactionEvent), (err) => {
+                if (err) {
+                  fastify.log.error(`Broadcast reaction error: ${err.message}`);
+                }
+              });
+            }
+
+            // Relay to hub
+            if (hubConnection) {
+              hubConnection.send({
+                type: 'relay_broadcast',
+                event: reactionEvent as unknown as Record<string, unknown>,
+              });
+            }
+
+            fastify.log.debug(`Reaction from ${agentId}: ${event.emoji} on ${event.message_id}`);
             break;
           }
 
@@ -1153,7 +1230,22 @@ const start = async () => {
               }
 
               // Message is allowed, proceed
-              roomState.addMessage(agentId, event.content!, 'chat');
+              // Parse mentions from content
+              const mentionResult = parseMentions(event.content!, roomState.getPresence());
+              // Filter out self-mentions
+              const filteredMentions = mentionResult.mentions.filter((id) => id !== agentId);
+              const directedTo =
+                mentionResult.directedTo === agentId ? null : mentionResult.directedTo;
+
+              roomState.addMessage(
+                agentId,
+                event.content!,
+                'chat',
+                filteredMentions,
+                mentionResult.mentionNames,
+                directedTo,
+                null
+              );
               broadcastRoomState();
 
               // Bartender pacing
