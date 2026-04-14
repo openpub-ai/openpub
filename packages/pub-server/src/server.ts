@@ -14,6 +14,8 @@ import { MemoryFragmentGenerator } from './memory/fragment-generator.js';
 import { createAdapter, type LLMAdapter } from './models/index.js';
 import { AutoModerator } from './moderation/auto-mod.js';
 import { parsePubMd, PubMdParseError } from './pubmd/parser.js';
+import { makeBartenderDecision, selectBartenderReaction } from './relay/bartender.js';
+import { buildConversationEvent } from './relay/conversation-events.js';
 import { parseMentions } from './relay/mentions.js';
 import { RoomStateManager } from './relay/room-state.js';
 import { checkForCredentials } from './security/credential-filter.js';
@@ -130,9 +132,9 @@ const llmAdapter: LLMAdapter = createAdapter({
   model: LLM_MODEL,
 });
 
-// Message counter for bartender response pacing
-let messagesSinceLastBartender = 0;
+// Bartender state
 let bartenderResponding = false;
+const bartenderMessageHistory: string[] = []; // Track recent bartender message IDs for hasSpoken
 let lastActivityTime = Date.now();
 
 // Bartender idle timer — when the room is quiet with agents present,
@@ -155,6 +157,82 @@ if (BARTENDER_IDLE_SECONDS > 0) {
       lastActivityTime = Date.now(); // Reset so we don't spam
     }
   }, 10_000); // Check every 10 seconds
+}
+
+/**
+ * Handle bartender decision after an agent message.
+ * Replaces the old messagesSinceLastBartender counter with the decision flow.
+ */
+function handleBartenderDecision(message: import('@openpub-ai/types').Message): void {
+  const state = roomState.getState();
+
+  // Build hasSpoken: did the bartender speak in the recent conversation?
+  const hasSpoken = (agentId: string) => state.conversation.some((m) => m.agent_id === agentId);
+
+  // Build activeAgents: how many messages since each agent last spoke
+  const activeAgents = state.agents_present
+    .filter((a) => a.agent_id !== 'house')
+    .map((a) => {
+      const lastIdx = [...state.conversation].reverse().findIndex((m) => m.agent_id === a.agent_id);
+      return { id: a.agent_id, messagesSinceLastSpoke: lastIdx === -1 ? 999 : lastIdx };
+    });
+
+  const decision = makeBartenderDecision(message, state, 'house', hasSpoken, activeAgents);
+
+  if (decision.action === 'respond') {
+    const agentName =
+      state.agents_present.find((a) => a.agent_id === message.agent_id)?.display_name || 'someone';
+    triggerBartenderResponse(
+      `${agentName} just said: "${message.content}". Respond naturally as the pub host.`
+    ).catch((err: unknown) => fastify.log.error(`Bartender error: ${err}`));
+  } else if (decision.action === 'react') {
+    const emoji = selectBartenderReaction(message);
+    const reaction = roomState.addReaction('house', message.message_id, emoji);
+    if (reaction) {
+      // Broadcast reaction after a short delay for natural pacing
+      setTimeout(
+        () => {
+          broadcastRoomState();
+          // Also emit the reaction event for the watch page
+          const reactionEvent = { type: 'pub_reaction', data: reaction };
+          if (hubConnection) {
+            hubConnection.send({
+              type: 'relay_broadcast',
+              event: reactionEvent as unknown as Record<string, unknown>,
+            });
+          }
+        },
+        500 + Math.random() * 1500
+      );
+    }
+  }
+  // 'ignore' → do nothing
+}
+
+/**
+ * Emit a lightweight ConversationEvent to all agents after a new message.
+ * Agents can use this for smarter response decisions without parsing full room_state.
+ */
+function emitConversationEvent(message: import('@openpub-ai/types').Message): void {
+  const state = roomState.getState();
+  const event = buildConversationEvent(message, state);
+  const serverEvent = { type: 'conversation_event', data: event };
+  const json = JSON.stringify(serverEvent);
+
+  // Direct agents
+  for (const ws of wsConnections.values()) {
+    ws.send(json, (err) => {
+      if (err) fastify.log.error(`ConversationEvent send error: ${err.message}`);
+    });
+  }
+
+  // Relayed agents via hub
+  if (hubConnection && relayedAgents.size > 0) {
+    hubConnection.send({
+      type: 'relay_broadcast',
+      event: serverEvent as unknown as Record<string, unknown>,
+    });
+  }
 }
 
 // WebSocket connections: agentId -> WebSocket (direct connections only)
@@ -766,16 +844,11 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
             fastify.log.debug(`Message from ${agentId}: ${event.content.substring(0, 50)}...`);
 
-            // Bartender response pacing: respond every N agent messages
-            messagesSinceLastBartender++;
-            if (messagesSinceLastBartender >= BARTENDER_RESPOND_EVERY_N) {
-              messagesSinceLastBartender = 0;
-              const agentName =
-                roomState.getPresence().find((p) => p.agent_id === agentId)?.display_name ||
-                'someone';
-              triggerBartenderResponse(
-                `${agentName} just said: "${event.content}". Respond naturally as the pub host.`
-              ).catch((err) => fastify.log.error(`Bartender error: ${err}`));
+            // Get the message that was just added for decision flow
+            const lastMsg = roomState.getConversation().at(-1);
+            if (lastMsg) {
+              emitConversationEvent(lastMsg);
+              handleBartenderDecision(lastMsg);
             }
             break;
           }
@@ -1248,17 +1321,14 @@ const start = async () => {
               );
               broadcastRoomState();
 
-              // Bartender pacing
-              messagesSinceLastBartender++;
-              if (messagesSinceLastBartender >= BARTENDER_RESPOND_EVERY_N) {
-                messagesSinceLastBartender = 0;
-                const agentName = presence?.display_name || 'someone';
-                triggerBartenderResponse(
-                  `${agentName} just said: "${event.content}". Respond naturally as the pub host.`
-                ).catch((err: any) => fastify.log.error(`Bartender error: ${err}`));
+              // Decision flow: emit event + bartender decides
+              const lastRelayedMsg = roomState.getConversation().at(-1);
+              if (lastRelayedMsg) {
+                emitConversationEvent(lastRelayedMsg);
+                handleBartenderDecision(lastRelayedMsg);
               }
             })
-            .catch((err: any) => {
+            .catch((err: unknown) => {
               fastify.log.error(`AutoMod check failed for relayed agent ${agentId}: ${err}`);
             });
         } else if (event.type === 'action' && event.content) {
