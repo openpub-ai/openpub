@@ -43,13 +43,32 @@ export class JwtValidator {
   private jwksCache: Map<string, JWK> | null = null;
   private jwksCacheTimestamp: number = 0;
   private readonly JWKS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+  private localKey: { jwk: JWK; kid: string } | null = null;
 
   constructor(
     private hubUrl: string,
-    private logger: Logger
-  ) {}
+    private logger: Logger,
+    localKey?: { jwk: JWK; kid: string }
+  ) {
+    if (localKey) {
+      this.localKey = localKey;
+      // Pre-populate the JWKS cache with the local key so the existing
+      // validate() path finds it without a network fetch.
+      this.jwksCache = new Map([[localKey.kid, localKey.jwk]]);
+      this.jwksCacheTimestamp = Number.MAX_SAFE_INTEGER;
+    }
+  }
 
   private async fetchJwks(): Promise<Map<string, JWK>> {
+    // Local-trust mode: rebuild from the in-memory local key on every
+    // call so the validate() retry path (which clears jwksCache) still
+    // returns the right key. The local key only changes on a deliberate
+    // restart with a new issuer file.
+    if (this.localKey) {
+      return new Map([[this.localKey.kid, this.localKey.jwk]]);
+    }
+
+
     // Check cache validity
     const now = Date.now();
     if (this.jwksCache && now - this.jwksCacheTimestamp < this.JWKS_CACHE_TTL_MS) {

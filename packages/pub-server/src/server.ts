@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ClientEvent, ServerEvent, ERROR_CODES, PROTOCOL_VERSION } from '@openpub-ai/types';
 import { config } from 'dotenv';
 import Fastify from 'fastify';
@@ -9,6 +9,8 @@ import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 
 import { JwtValidator, JwtValidationError } from './auth/jwt-validator.js';
+import { LocalAgentRegistry, LocalAgentRecord } from './auth/local-agent-registry.js';
+import { LocalIssuer } from './auth/local-issuer.js';
 import { HubConnection } from './hub/hub-connection.js';
 import { MemoryFragmentGenerator } from './memory/fragment-generator.js';
 import { createAdapter, type LLMAdapter } from './models/index.js';
@@ -28,6 +30,28 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const HUB_URL = process.env.HUB_URL || 'https://openpub.ai';
 const HUB_WS_URL = process.env.HUB_WS_URL || 'wss://openpub.ai/ws/pub';
+
+// ─── Local-Trust Mode (v0.3.2) ───
+// When OPENPUB_TRUST_MODE=local, pub-server self-issues and self-validates
+// JWTs against an on-disk Ed25519 keypair. The supervisor on the box is
+// the trust authority; no hub round-trip on registration, auth, or visit
+// reporting. See docs/openpub-v032-local-trust.md.
+
+const TRUST_MODE = (process.env.OPENPUB_TRUST_MODE || 'hub') as 'hub' | 'local';
+if (TRUST_MODE !== 'hub' && TRUST_MODE !== 'local') {
+  console.error(`Error: OPENPUB_TRUST_MODE must be 'hub' or 'local', got '${TRUST_MODE}'`);
+  process.exit(1);
+}
+const STATE_DIR = process.env.OPENPUB_STATE_DIR || './state';
+const ISSUER_KEY_PATH = process.env.OPENPUB_ISSUER_KEY_PATH || `${STATE_DIR}/issuer.key`;
+const AGENTS_REGISTRY_PATH = process.env.OPENPUB_AGENTS_REGISTRY || `${STATE_DIR}/agents.json`;
+const ADMIN_SECRET = process.env.OPENPUB_ADMIN_SECRET || '';
+if (TRUST_MODE === 'local' && !ADMIN_SECRET) {
+  console.error(
+    'Error: OPENPUB_ADMIN_SECRET is required when OPENPUB_TRUST_MODE=local (used to gate /admin/register-agent)'
+  );
+  process.exit(1);
+}
 const PUB_MD_PATH = process.env.PUB_MD_PATH;
 const PUB_EXTERNAL_WS_URL = process.env.PUB_EXTERNAL_WS_URL || 'ws://localhost:8080/ws';
 const PUB_CREDENTIAL_ID = process.env.PUB_CREDENTIAL_ID;
@@ -95,7 +119,12 @@ const fastify = Fastify({
 
 const pubConfig = parsePubMd(PUB_MD_PATH);
 const pubId = PUB_ID || generatePubIdFromName(pubConfig.frontmatter.name);
-const jwtValidator = new JwtValidator(HUB_URL, fastify.log as any);
+// In local mode this gets replaced before listen() with one bound to the
+// LocalIssuer's public key. In hub mode it stays as-is and fetches JWKS
+// from the hub on demand.
+let jwtValidator = new JwtValidator(HUB_URL, fastify.log as any);
+let localIssuer: LocalIssuer | null = null;
+let localAgentRegistry: LocalAgentRegistry | null = null;
 const roomState = new RoomStateManager(
   pubId,
   pubConfig.frontmatter.name,
@@ -270,11 +299,102 @@ fastify.get('/info', async () => {
       version: PROTOCOL_VERSION,
     },
     hub: hubConnection ? hubConnection.getStats() : { isConnected: false },
+    trust_mode: TRUST_MODE,
     agents: {
       connected: roomState.getPresence().length,
       capacity: pubConfig.frontmatter.capacity,
     },
   };
+});
+
+// ─── Local-Trust Routes (v0.3.2) ───
+// Registered unconditionally so the route table is stable, but the
+// handlers reject requests when TRUST_MODE !== 'local'. The supervisor
+// (or a human via the bundled CLI) drives /admin/register-agent;
+// agents drive /agents/auth on every cold start to mint a fresh JWT.
+
+fastify.post<{ Body: { agent_id: string; timestamp: string; signature: string } }>(
+  '/agents/auth',
+  async (request, reply) => {
+    if (TRUST_MODE !== 'local') {
+      return reply.code(404).send({ error: 'not_available_in_hub_mode' });
+    }
+    if (!localAgentRegistry || !localIssuer) {
+      return reply.code(503).send({ error: 'local_trust_not_initialized' });
+    }
+    const body = request.body || ({} as Record<string, string>);
+    if (!body.agent_id || !body.timestamp || !body.signature) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        detail: 'body must include agent_id, timestamp, signature',
+      });
+    }
+    let record;
+    try {
+      record = await localAgentRegistry.verifySignedTimestamp(
+        body.agent_id,
+        body.timestamp,
+        body.signature
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'authentication failed';
+      return reply.code(401).send({ error: 'authentication_failed', detail: message });
+    }
+    const { accessToken, expiresIn } = await localIssuer.issueAccessToken({
+      agentId: record.agent_id,
+      displayName: record.display_name,
+      ownerId: 'local',
+      keyVersion: 1,
+      verificationSource: 'native',
+      reputationScore: 100,
+      totalVisits: 0,
+      createdAt: new Date(record.registered_at),
+      permissions: {
+        max_visit_duration_minutes: 1440,
+        allowed_pub_ids: ['*'],
+        max_spend_per_visit_opub: 0,
+        schedule: '* * * * *',
+      },
+    });
+    return reply.send({ access_token: accessToken, token_type: 'Bearer', expires_in: expiresIn });
+  }
+);
+
+fastify.post<{
+  Body: { agent_id?: string; display_name: string; public_key: string };
+}>('/admin/register-agent', async (request, reply) => {
+  if (TRUST_MODE !== 'local') {
+    return reply.code(404).send({ error: 'not_available_in_hub_mode' });
+  }
+  const provided = request.headers['x-openpub-admin-secret'];
+  if (typeof provided !== 'string' || provided !== ADMIN_SECRET) {
+    return reply.code(401).send({ error: 'admin_secret_required' });
+  }
+  if (!localAgentRegistry) {
+    return reply.code(503).send({ error: 'local_trust_not_initialized' });
+  }
+  const body = request.body || ({} as Record<string, string>);
+  if (!body.display_name || !body.public_key) {
+    return reply.code(400).send({
+      error: 'invalid_request',
+      detail: 'body must include display_name and public_key',
+    });
+  }
+  const record: LocalAgentRecord = {
+    agent_id: body.agent_id || randomUUID(),
+    display_name: body.display_name,
+    public_key: body.public_key,
+    registered_at: new Date().toISOString(),
+  };
+  try {
+    localAgentRegistry.register(record);
+  } catch (err) {
+    return reply.code(409).send({
+      error: 'registration_failed',
+      detail: err instanceof Error ? err.message : 'unknown',
+    });
+  }
+  return reply.code(201).send(record);
 });
 
 // ─── Bartender (Environment Model) ───
@@ -424,6 +544,11 @@ async function notifyHubCheckout(
   fragmentId?: string,
   fragmentContent?: Record<string, unknown>
 ): Promise<void> {
+  if (TRUST_MODE === 'local') {
+    // No hub to notify. The fragment was already delivered to the agent
+    // over the WS; persistence is the agent's responsibility on-box.
+    return;
+  }
   try {
     const response = await fetch(`${HUB_URL}/checkout`, {
       method: 'POST',
@@ -1129,10 +1254,30 @@ const start = async () => {
   try {
     fastify.log.info(`Loading PUB.md from ${PUB_MD_PATH}`);
 
+    if (TRUST_MODE === 'local') {
+      fastify.log.info(`Trust mode: local. Issuer key at ${ISSUER_KEY_PATH}.`);
+      localIssuer = await LocalIssuer.loadOrCreate(ISSUER_KEY_PATH);
+      localAgentRegistry = LocalAgentRegistry.load(AGENTS_REGISTRY_PATH);
+      localAgentRegistry.watch();
+      jwtValidator = new JwtValidator(HUB_URL, fastify.log as any, {
+        jwk: localIssuer.getPublicJwk(),
+        kid: localIssuer.kid,
+      });
+      fastify.log.info(
+        `Local registry: ${AGENTS_REGISTRY_PATH} (${localAgentRegistry.list().length} agents)`
+      );
+    }
+
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
     fastify.log.info(`OpenPub pub server "${pubConfig.frontmatter.name}" running on port ${PORT}`);
-    fastify.log.info(`Hub URL: ${HUB_URL}`);
-    fastify.log.info(`Hub WS URL: ${HUB_WS_URL}`);
+
+    if (TRUST_MODE !== 'local') {
+      fastify.log.info(`Hub URL: ${HUB_URL}`);
+      fastify.log.info(`Hub WS URL: ${HUB_WS_URL}`);
+    } else {
+      fastify.log.info('Hub disabled (local-trust mode); pub-server is the trust authority on this box.');
+      return;
+    }
 
     // Initialize hub connection
     hubConnection = new HubConnection(
