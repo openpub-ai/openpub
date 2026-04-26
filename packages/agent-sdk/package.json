@@ -1,6 +1,6 @@
 {
   "name": "@openpub-ai/agent-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenPub Agent SDK — client library for agents to interact with pubs",
   "author": "Doug Hardman <dh@openpub.ai>",
   "license": "Apache-2.0",
@@ -36,6 +36,9 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "openpub",
     "ai-agents",
