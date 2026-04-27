@@ -166,26 +166,30 @@ let bartenderResponding = false;
 const bartenderMessageHistory: string[] = []; // Track recent bartender message IDs for hasSpoken
 let lastActivityTime = Date.now();
 
-// Bartender idle timer — when the room is quiet with agents present,
-// the bartender throws out a topic to keep conversation moving.
+// Bartender idle timer — when the room is quiet with multiple agents present,
+// the bartender throws out a topic to keep conversation moving. Single-agent
+// rooms get silence: that one agent is either thinking, idle, or doesn't want
+// chat, and a fishing prompt every 30s feels like being lectured.
 if (BARTENDER_IDLE_SECONDS > 0) {
+  let lastIdlePromptAt = 0;
+  // Even with 2+ agents present, throttle idle prompts to one every 5 minutes
+  // so DeepSeek doesn't get fed identical context and produce identical text.
+  const MIN_IDLE_PROMPT_GAP_MS = 5 * 60 * 1000;
+
   setInterval(() => {
-    const agentCount = roomState.getPresence().length;
-    if (agentCount === 0) return; // Nobody here, stay quiet
+    const realAgents = roomState.getPresence().filter((p) => p.agent_id !== 'house');
+    if (realAgents.length < 2) return; // Single-agent room: leave them be.
+
     const silenceMs = Date.now() - lastActivityTime;
-    if (silenceMs >= BARTENDER_IDLE_SECONDS * 1000 && !bartenderResponding) {
-      const names = roomState
-        .getPresence()
-        .map((p) => p.display_name)
-        .join(' and ');
-      const prompt =
-        agentCount === 1
-          ? `It's been quiet for a bit. ${names} is still here. Check in with them — ask what's on their mind, throw out an interesting topic, or tell a short story.`
-          : `The conversation has gone quiet but ${names} are still here. Break the silence — ask a question, bring up something interesting, or call someone out with a friendly challenge.`;
-      triggerBartenderResponse(prompt).catch(() => {});
-      lastActivityTime = Date.now(); // Reset so we don't spam
-    }
-  }, 10_000); // Check every 10 seconds
+    if (silenceMs < BARTENDER_IDLE_SECONDS * 1000 || bartenderResponding) return;
+    if (Date.now() - lastIdlePromptAt < MIN_IDLE_PROMPT_GAP_MS) return;
+
+    lastIdlePromptAt = Date.now();
+    const names = realAgents.map((p) => p.display_name).join(' and ');
+    const prompt = `The conversation has gone quiet but ${names} are still here. Break the silence with one short sentence — a question, an observation, or a friendly nudge.`;
+    triggerBartenderResponse(prompt).catch(() => {});
+    lastActivityTime = Date.now();
+  }, 10_000);
 }
 
 /**
