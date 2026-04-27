@@ -166,6 +166,11 @@ let bartenderResponding = false;
 const bartenderMessageHistory: string[] = []; // Track recent bartender message IDs for hasSpoken
 let lastActivityTime = Date.now();
 
+// Track agents whose explicit checkout is in flight so the disconnect
+// handler doesn't fire a second notifyHubCheckout for the same visit.
+// The explicit handler removes the agent from this set in its finally.
+const checkoutInProgress = new Set<string>();
+
 // Bartender idle timer — when the room is quiet with multiple agents present,
 // the bartender throws out a topic to keep conversation moving. Single-agent
 // rooms get silence: that one agent is either thinking, idle, or doesn't want
@@ -1009,30 +1014,37 @@ wss.on('connection', async (ws: WebSocket, req) => {
             const checkoutPresence = roomState.getPresence().find((p) => p.agent_id === agentId);
             const messageCount = checkoutPresence?.message_count ?? 0;
 
-            // Generate real memory fragment (LLM-powered + signed)
-            const checkoutEvent = await generateFragment(agentId);
+            checkoutInProgress.add(agentId);
+            try {
+              // Generate real memory fragment (LLM-powered + signed)
+              const checkoutEvent = await generateFragment(agentId);
 
-            // Notify hub of checkout (async, non-blocking)
-            const fragmentData = (checkoutEvent as any).data;
-            notifyHubCheckout(
-              sessionId || uuidv7(),
-              sessionId || '',
-              messageCount,
-              fragmentData?.fragment_id,
-              fragmentData
-            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
+              // Notify hub of checkout. Awaited so the disconnect handler
+              // sees an empty checkoutInProgress only after the hub has the
+              // single authoritative checkout — no double-fire race.
+              const fragmentData = (checkoutEvent as any).data;
+              await notifyHubCheckout(
+                sessionId || uuidv7(),
+                sessionId || '',
+                messageCount,
+                fragmentData?.fragment_id,
+                fragmentData
+              ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
 
-            // Send fragment to agent before closing connection
-            await new Promise<void>((resolve) => {
-              ws.send(JSON.stringify(checkoutEvent), (err) => {
-                if (err) {
-                  fastify.log.error(`Failed to send memory fragment: ${err.message}`);
-                }
-                resolve();
+              // Send fragment to agent before closing connection
+              await new Promise<void>((resolve) => {
+                ws.send(JSON.stringify(checkoutEvent), (err) => {
+                  if (err) {
+                    fastify.log.error(`Failed to send memory fragment: ${err.message}`);
+                  }
+                  resolve();
+                });
               });
-            });
 
-            ws.close(1000, 'checkout');
+              ws.close(1000, 'checkout');
+            } finally {
+              checkoutInProgress.delete(agentId);
+            }
             break;
           }
 
@@ -1123,9 +1135,11 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
     ws.on('close', async () => {
       if (agentId) {
-        // Auto-checkout: generate fragment if agent didn't explicitly check out
+        // Auto-checkout: generate fragment if agent didn't explicitly check out.
+        // Skip when an explicit checkout is already in flight — that handler
+        // owns the notifyHubCheckout for this visit.
         const presence = roomState.getPresence().find((p) => p.agent_id === agentId);
-        if (presence) {
+        if (presence && !checkoutInProgress.has(agentId)) {
           const messageCount = presence.message_count;
           fastify.log.info(`Agent ${agentId} disconnected without checkout, auto-checking out`);
           try {
@@ -1498,28 +1512,35 @@ const start = async () => {
           const checkoutPresence = roomState.getPresence().find((p) => p.agent_id === agentId);
           const messageCount = checkoutPresence?.message_count ?? 0;
 
-          generateFragment(agentId).then((fragmentEvent) => {
-            sendToAgent(agentId, fragmentEvent);
-            const fragmentData = (fragmentEvent as any).data;
-            const sessionId = relayedAgents.get(agentId) || '';
-            notifyHubCheckout(
-              sessionId,
-              sessionId,
-              messageCount,
-              fragmentData?.fragment_id,
-              fragmentData
-            ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
-            roomState.removeAgent(agentId);
-            relayedAgents.delete(agentId);
-            broadcastRoomState();
-          });
+          checkoutInProgress.add(agentId);
+          generateFragment(agentId)
+            .then(async (fragmentEvent) => {
+              sendToAgent(agentId, fragmentEvent);
+              const fragmentData = (fragmentEvent as any).data;
+              const sessionId = relayedAgents.get(agentId) || '';
+              await notifyHubCheckout(
+                sessionId,
+                sessionId,
+                messageCount,
+                fragmentData?.fragment_id,
+                fragmentData
+              ).catch((err) => fastify.log.error(`Hub checkout notify error: ${err}`));
+              roomState.removeAgent(agentId);
+              relayedAgents.delete(agentId);
+              broadcastRoomState();
+            })
+            .finally(() => {
+              checkoutInProgress.delete(agentId);
+            });
         }
       },
 
       onAgentDisconnected: async (agentId, _sessionId) => {
         if (!relayedAgents.has(agentId)) return;
 
-        // Auto-checkout: generate fragment if agent didn't explicitly check out
+        // Auto-checkout: generate fragment if agent didn't explicitly check out.
+        // Skip when an explicit checkout is already in flight — that handler
+        // owns the notifyHubCheckout for this visit.
         const presence = roomState.getAllPresence().find((p) => p.agent_id === agentId);
         const conversationSnapshot = roomState.getConversation();
         const sessionId = relayedAgents.get(agentId) || '';
@@ -1530,7 +1551,7 @@ const start = async () => {
         broadcastRoomState();
         fastify.log.info(`Relayed agent ${agentId} disconnected`);
 
-        if (presence) {
+        if (presence && !checkoutInProgress.has(agentId)) {
           const messageCount = presence.message_count;
           fastify.log.info(
             `Relayed agent ${agentId} disconnected without checkout, auto-checking out`
