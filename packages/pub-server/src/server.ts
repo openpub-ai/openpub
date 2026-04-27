@@ -20,6 +20,7 @@ import { makeBartenderDecision, selectBartenderReaction } from './relay/bartende
 import { buildConversationEvent } from './relay/conversation-events.js';
 import { parseMentions } from './relay/mentions.js';
 import { RoomStateManager } from './relay/room-state.js';
+import { armWsKeepalive } from './relay/ws-keepalive.js';
 import { checkForCredentials } from './security/credential-filter.js';
 
 config();
@@ -615,10 +616,7 @@ spectatorWss.on('connection', (ws: WebSocket) => {
     return;
   }
 
-  (ws as any).isAlive = true;
-  ws.on('pong', () => {
-    (ws as any).isAlive = true;
-  });
+  armWsKeepalive(ws as unknown as Parameters<typeof armWsKeepalive>[0]);
 
   spectatorConnections.add(ws);
   fastify.log.info(`Spectator connected (total: ${spectatorConnections.size})`);
@@ -833,6 +831,7 @@ wss.on('connection', async (ws: WebSocket, req) => {
 
     // Register WebSocket connection
     wsConnections.set(agentId, ws);
+    armWsKeepalive(ws as unknown as Parameters<typeof armWsKeepalive>[0]);
 
     // Send welcome event
     const welcomeEvent: ServerEvent = {
