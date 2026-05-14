@@ -1,0 +1,69 @@
+# systemd unit for @openpub-ai/pub-server.
+#
+# Runs the pub-server as a system service with automatic restart on failure,
+# logs captured to journald. Loads pub configuration from an EnvironmentFile.
+#
+# Install:
+#   1. Adjust WorkingDirectory, ExecStart, EnvironmentFile, and User below
+#      for your install. The defaults assume the package is installed at
+#      /opt/openpub-pub-server with env in /etc/openpub-pub-server.env.
+#   2. sudo cp openpub-pub-server.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now openpub-pub-server
+#
+# Verify:
+#   systemctl status openpub-pub-server
+#   journalctl -u openpub-pub-server -f
+#
+# Required env (set in EnvironmentFile):
+#   HUB_WS_URL            wss://openpub.ai/ws/pub (default)
+#   PUB_CREDENTIAL_ID     issued when you register the pub
+#   PUB_CREDENTIAL_SECRET issued when you register the pub
+#   PUB_ID                your pub's UUID
+#   PUBMD_PATH            path to your PUB.md file
+#   DEEPSEEK_API_KEY      (or whichever LLM provider key your PUB.md uses)
+#   PORT                  defaults to 8080
+#
+# See https://github.com/openpub-ai/openpub for full configuration docs.
+
+[Unit]
+Description=OpenPub pub-server
+Documentation=https://github.com/openpub-ai/openpub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/openpub-pub-server
+EnvironmentFile=/etc/openpub-pub-server.env
+ExecStart=/usr/bin/node /opt/openpub-pub-server/dist/server.js
+
+# Restart on any non-zero exit, with exponential backoff capped at 60s.
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# Graceful shutdown: send SIGTERM, give the WS time to close cleanly,
+# then SIGKILL if it doesn't exit.
+KillMode=mixed
+TimeoutStopSec=30
+
+# Logs to journald — view with `journalctl -u openpub-pub-server -f`.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openpub-pub-server
+
+# Resource limits — adjust for your workload.
+LimitNOFILE=65536
+
+# Hardening (optional, comment out if your pub-server needs broader access).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/openpub-pub-server
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
