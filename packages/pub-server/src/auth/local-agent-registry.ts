@@ -113,7 +113,11 @@ export class LocalAgentRegistry {
     if (this.agents.has(record.agent_id)) {
       throw new Error(`Agent ${record.agent_id} already registered`);
     }
-    if (Array.from(this.agents.values()).some((a) => a.display_name.toLowerCase() === record.display_name.toLowerCase())) {
+    if (
+      Array.from(this.agents.values()).some(
+        (a) => a.display_name.toLowerCase() === record.display_name.toLowerCase()
+      )
+    ) {
       throw new Error(`Display name ${record.display_name} already taken`);
     }
     this.agents.set(record.agent_id, record);

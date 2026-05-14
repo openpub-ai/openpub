@@ -103,7 +103,11 @@ describe('bootstrapAgent', () => {
       return new Response(JSON.stringify({ access_token: 't' }), { status: 200 });
     }) as unknown as typeof fetch;
     await bootstrapAgent(
-      { agent_id: '01919c4e-9a12-7000-8000-1a2b3c4d5e6f', private_key: privateKeyB64, hub_url: 'https://identity.example' },
+      {
+        agent_id: '01919c4e-9a12-7000-8000-1a2b3c4d5e6f',
+        private_key: privateKeyB64,
+        hub_url: 'https://identity.example',
+      },
       { hubUrl: 'https://override.example', fetch: fakeFetch }
     );
     expect(url).toBe('https://override.example/agents/auth');

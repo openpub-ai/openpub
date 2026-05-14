@@ -11,7 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LocalAgentRegistry } from './local-agent-registry.js';
 
 function bytesToBase64Url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return Buffer.from(bytes)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 async function makeKeypair() {
@@ -162,8 +166,8 @@ describe('LocalAgentRegistry', () => {
 
   it('rejects unknown agent_id', async () => {
     const reg = LocalAgentRegistry.load(path);
-    await expect(reg.verifySignedTimestamp('nonexistent', new Date().toISOString(), 'x')).rejects.toThrow(
-      /not registered/
-    );
+    await expect(
+      reg.verifySignedTimestamp('nonexistent', new Date().toISOString(), 'x')
+    ).rejects.toThrow(/not registered/);
   });
 });

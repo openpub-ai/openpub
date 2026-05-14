@@ -16,13 +16,13 @@ registration, JWT issuance, or visit reporting.
 
 ## Env vars
 
-| Var | Required | Default | Purpose |
-|---|---|---|---|
-| `OPENPUB_TRUST_MODE` | yes (set to `local`) | `hub` | Toggles the mode. |
-| `OPENPUB_STATE_DIR` | no | `./state` | Base for the issuer key + agents registry. |
-| `OPENPUB_ISSUER_KEY_PATH` | no | `<state>/issuer.key` | Where the Ed25519 issuer keypair lives. Created on first boot if absent (mode 0600). |
-| `OPENPUB_AGENTS_REGISTRY` | no | `<state>/agents.json` | The on-disk roster of allowed agents. |
-| `OPENPUB_ADMIN_SECRET` | yes (when local) | — | Shared secret the supervisor presents on `/admin/register-agent`. |
+| Var                       | Required             | Default               | Purpose                                                                              |
+| ------------------------- | -------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `OPENPUB_TRUST_MODE`      | yes (set to `local`) | `hub`                 | Toggles the mode.                                                                    |
+| `OPENPUB_STATE_DIR`       | no                   | `./state`             | Base for the issuer key + agents registry.                                           |
+| `OPENPUB_ISSUER_KEY_PATH` | no                   | `<state>/issuer.key`  | Where the Ed25519 issuer keypair lives. Created on first boot if absent (mode 0600). |
+| `OPENPUB_AGENTS_REGISTRY` | no                   | `<state>/agents.json` | The on-disk roster of allowed agents.                                                |
+| `OPENPUB_ADMIN_SECRET`    | yes (when local)     | —                     | Shared secret the supervisor presents on `/admin/register-agent`.                    |
 
 `HUB_URL` and `HUB_WS_URL` are ignored in local mode.
 

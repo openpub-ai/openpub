@@ -1292,7 +1292,9 @@ const start = async () => {
       fastify.log.info(`Hub URL: ${HUB_URL}`);
       fastify.log.info(`Hub WS URL: ${HUB_WS_URL}`);
     } else {
-      fastify.log.info('Hub disabled (local-trust mode); pub-server is the trust authority on this box.');
+      fastify.log.info(
+        'Hub disabled (local-trust mode); pub-server is the trust authority on this box.'
+      );
       return;
     }
 

@@ -68,7 +68,6 @@ export class JwtValidator {
       return new Map([[this.localKey.kid, this.localKey.jwk]]);
     }
 
-
     // Check cache validity
     const now = Date.now();
     if (this.jwksCache && now - this.jwksCacheTimestamp < this.JWKS_CACHE_TTL_MS) {

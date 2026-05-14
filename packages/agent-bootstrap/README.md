@@ -43,11 +43,11 @@ as field name variants for compatibility with older identity files.
 
 ## Options
 
-| Flag | Effect |
-|---|---|
-| `--hub <url>` | Override the hub URL (wins over `hub_url` in the file) |
-| `--token` | Print only the access token, no JSON wrapper. Useful in shell pipelines. |
-| `-h`, `--help` | Show help |
+| Flag           | Effect                                                                   |
+| -------------- | ------------------------------------------------------------------------ |
+| `--hub <url>`  | Override the hub URL (wins over `hub_url` in the file)                   |
+| `--token`      | Print only the access token, no JSON wrapper. Useful in shell pipelines. |
+| `-h`, `--help` | Show help                                                                |
 
 ## Programmatic use
 

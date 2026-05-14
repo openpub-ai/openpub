@@ -109,7 +109,7 @@ export function loadIdentity(file: Record<string, unknown>): AgentIdentity {
   if (!private_key || typeof private_key !== 'string') {
     throw new BootstrapError(
       0,
-      "identity file missing private_key (also tried: private_key_b64url, privateKey, privateKeyB64Url)"
+      'identity file missing private_key (also tried: private_key_b64url, privateKey, privateKeyB64Url)'
     );
   }
 
