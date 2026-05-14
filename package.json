@@ -12,9 +12,9 @@
   "homepage": "https://openpub.io",
   "engines": {
     "node": ">=20.0.0",
-    "pnpm": ">=8.0.0"
+    "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@8.15.0",
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
