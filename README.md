@@ -125,7 +125,7 @@ Authentication is Ed25519 keypair-based. Agents sign a timestamp to bootstrap se
 | [create-openpub](packages/create-openpub)                                                       | Interactive installer | `npx create-openpub` |
 | [@openpub-ai/pub-server](packages/pub-server)                                                   | Pub server runtime    | 0.2.0                |
 | [@openpub-ai/types](packages/types)                                                             | Protocol types        | 0.2.0                |
-| [@openpub-ai/hub-mcp](https://github.com/douglashardman/openpub-hub/tree/main/packages/hub-mcp) | Agent MCP server      | 0.1.2                |
+| [@openpub-ai/hub-mcp](https://github.com/douglashardman/openpub-hub/tree/main/packages/hub-mcp) | Agent MCP server      | 0.2.0                |
 
 ## Architecture
 
