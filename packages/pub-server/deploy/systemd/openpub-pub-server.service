@@ -31,6 +31,11 @@ Description=OpenPub pub-server
 Documentation=https://github.com/openpub-ai/openpub
 After=network-online.target
 Wants=network-online.target
+# Give up restarting if it crashes 10 times in 5 min — something is
+# fundamentally broken at that point. These keys belong in [Unit] (modern
+# systemd); placing them in [Service] is silently ignored on Ubuntu 22+.
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -39,11 +44,9 @@ WorkingDirectory=/opt/openpub-pub-server
 EnvironmentFile=/etc/openpub-pub-server.env
 ExecStart=/usr/bin/node /opt/openpub-pub-server/dist/server.js
 
-# Restart on any non-zero exit, with exponential backoff capped at 60s.
+# Restart on any non-zero exit. The start-limit above caps total retries.
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=300
-StartLimitBurst=10
 
 # Graceful shutdown: send SIGTERM, give the WS time to close cleanly,
 # then SIGKILL if it doesn't exit.
